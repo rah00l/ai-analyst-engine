@@ -1,0 +1,215 @@
+
+# ✅ Scope of `setup` → `v1.0.0-scaffold`
+
+### What this tag represents
+
+> “This repository is structurally ready to host the engine, but contains **no engine logic** yet.”
+
+This tag is about **repo hygiene + execution environment** only.
+
+***
+
+# 📁 Files to include (and ONLY these)
+
+    .
+    ├── Gemfile
+    ├── .gitignore
+    ├── Dockerfile
+    ├── .env.example
+    ├── README.md
+
+Nothing under `lib/engine` yet.  
+That comes in `extract-core`.
+
+***
+
+# 1️⃣ Gemfile (minimal, intentional)
+
+### ✅ Purpose
+
+*   Define Ruby version compatibility
+*   Lock *infrastructure-only* deps
+*   No engine behavior yet
+
+### ✅ Contents
+
+```ruby
+source "https://rubygems.org"
+
+ruby ">= 3.1.0"
+
+# Runtime (adapter-level only, not engine logic)
+gem "sinatra", "~> 3.0"
+
+# Dev / local execution
+group :development do
+  gem "rackup"
+end
+```
+
+✅ Notes
+
+*   Sinatra is allowed here because it’s an **adapter**, not engine logic
+*   No testing gems yet (RSpec comes later, if at all)
+
+***
+
+# 2️⃣ .gitignore (boring but correct)
+
+### ✅ Purpose
+
+Keep the repo deterministic and clean.
+
+### ✅ Contents
+
+    .bundle/
+    vendor/bundle
+
+    .env
+    .env.local
+
+    log/
+    tmp/
+
+    .DS_Store
+
+✅ Nothing clever. Nothing custom.
+
+***
+
+# 3️⃣ Dockerfile (execution environment only)
+
+### ✅ Purpose
+
+*   Reproducible runtime
+*   Demo repo can reuse this later
+
+### ✅ Contents
+
+```dockerfile
+FROM ruby:3.2-slim
+
+WORKDIR /app
+
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+
+COPY . .
+
+CMD ["irb"]
+```
+
+✅ Notes
+
+*   No exposed ports yet
+*   No Sinatra run command yet
+*   This just proves the repo **runs**
+
+***
+
+# 4️⃣ .env.example (contract, not secrets)
+
+### ✅ Purpose
+
+Tell future consumers what *might* be configured — without usage yet.
+
+### ✅ Contents
+
+    # Environment
+    RACK_ENV=development
+
+    # App adapter (used later)
+    PORT=4567
+
+✅ This is a **promise**, not an implementation.
+
+***
+
+# 5️⃣ README.md (Strategy‑4: Minimal README)
+
+You were very clear here, so I’ve followed your rules **strictly**.
+
+***
+
+## ✅ README.md (ready to paste)
+
+````markdown
+# ai-analyst-engine
+
+A pure reasoning engine that analyzes text input and produces structured explanations.
+
+This repository contains a **pure reasoning engine**.
+No UI, no persistence, no external dependencies beyond Ruby standard libraries (adapters excluded).
+
+---
+
+## What the engine does
+
+- Accepts natural language input
+- Resolves intent and domain concepts
+- Produces a deterministic, structured explanation output
+
+---
+
+## How to call it
+
+The engine exposes a single public entry point:
+
+```ruby
+Engine::Analyzer.analyze(text:, context: {})
+````
+
+***
+
+## What it returns
+
+A structured explanation object containing:
+
+*   Identified intent
+*   Matched domain concepts
+*   Final explanation payload
+
+(The exact schema is defined by the explanation contract.)
+
+***
+
+## How to run it
+
+### Local
+
+```bash
+bundle install
+bin/console
+```
+
+### Docker
+
+```bash
+docker build -t ai-analyst-engine .
+docker run -it ai-analyst-engine
+```
+
+````
+
+✅ No journey  
+✅ No philosophy essay  
+✅ No evolution  
+✅ No diagrams  
+
+This README will **age well**.
+
+---
+
+# 🏷️ Tagging guidance
+
+After committing these files:
+
+```bash
+git checkout setup
+git commit -m "chore: repository scaffold and runtime setup"
+git tag v1.0.0-scaffold
+git push origin setup --tags
+````
+
+Then merge → `main`.
+
