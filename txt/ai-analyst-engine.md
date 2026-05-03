@@ -6,7 +6,7 @@ Let me read both files carefully before answering.Reading the AI engine strategy
     animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
   }
 
- 
+
 Question 1 — Is the approach right?
 What is confirmed ✓
 Two repos — engine + demo — correct split
@@ -179,12 +179,16 @@ Decision: Milestone-based tags + task-based commits — hybrid
 Your existing journey repo uses milestone-based tags (v0.1.0 through v0.11.0) — this discipline is your strongest portfolio signal. Keep it. For the two new repos the strategy is: task-based commits within a milestone, milestone tag at completion. This matches how real teams work and how your journey has already proven itself.
 
 Repo 1: ai-analyst-engine — branch + tag strategy
+
 branch: main
 Protected. Only receives merges from feature branches. Never commit directly.
+
 branch: setup
 Initial scaffold, Gemfile, Dockerfile, .env.example, README skeleton. Merge → tag v1.0.0-scaffold
+
 branch: extract-core
 Move all 35 files from journey repo into correct engine folders. One commit per logical group: intent/, knowledge/, eligibility/, etc. Merge → tag v1.0.0-core
+
 branch: add-orchestrator
 Write Engine::Analyzer — the single public entry point. Write lib/engine.rb require chain. Merge → tag v1.0.0-orchestrator
 branch: sinatra-adapter
