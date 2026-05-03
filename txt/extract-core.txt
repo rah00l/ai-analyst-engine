@@ -1,0 +1,371 @@
+# ✅ Scope of `extract-core` → `v1.0.0-core`
+
+### What this tag represents
+
+> “All **engine logic files** have been correctly extracted, renamed, and placed into the canonical engine structure.  
+> No orchestration, no adapters, no API, no YAML yet. Raw engine building blocks only.”
+
+This is a **mechanical extraction + normalization gate**.
+
+***
+
+## 🔒 Hard rules for this branch (important)
+
+*   ❌ **Do NOT write new logic**
+*   ❌ **Do NOT refactor behavior**
+*   ✅ Only:
+    *   move files
+    *   rename files
+    *   adjust **module namespaces**
+    *   fix `require` paths if absolutely necessary
+*   ✅ One commit per **logical group** (as you already planned)
+
+If behavior changes here, rollback.
+
+***
+
+# 🌳 Branch setup
+
+```bash
+git checkout main
+git pull
+git checkout -b extract-core
+```
+
+***
+
+# 📁 Step 1 — Create target folder skeleton (no files yet)
+
+Create this structure **first**, empty:
+
+    lib/
+      engine/
+        reliability/
+        context/
+        knowledge/
+        eligibility/
+        grounding/
+        lifecycle/
+        templates/
+
+Do **not** add:
+
+*   `engine.rb`
+*   `analyzer.rb`
+*   `resources/`
+*   `sinatra/`
+
+Those come later branches.
+
+Commit this alone:
+
+```bash
+git commit -m "chore: create canonical engine folder structure"
+```
+
+✅ This gives you a clean base for grouped commits.
+
+***
+
+# 📤 Step 2 — Core engine extraction (top‑level engine files)
+
+### Files
+
+    lib/engine/
+      intent_resolver.rb
+      canonicalizer.rb
+      alias_map.rb
+      intent_contract.rb
+      concept_classifier.rb
+      explanation_builder.rb
+      explanation_contract.rb
+      follow_up_classifier.rb
+      projection_resolver.rb
+      context_store.rb
+      boundary_responder.rb
+
+### Source
+
+From `ruby/09-contextual-reuse/` and earlier milestones as specified.
+
+### Required change
+
+At top of **every file**:
+
+```ruby
+module Engine
+```
+
+…and matching `end`.
+
+❌ No logic edits.  
+✅ Namespace only.
+
+Commit:
+
+```bash
+git commit -m "extract: core engine resolution and explanation components"
+```
+
+***
+
+# 🔁 Step 3 — Reliability layer extraction
+
+### Files
+
+    lib/engine/reliability/
+      ai_call_boundary.rb
+      retry_policy.rb
+      cost_guard.rb
+      latency_budget.rb
+      failure_classification.rb
+      safety_fallback.rb
+      trust_contract.rb
+
+### Rules
+
+*   Namespace as:
+
+```ruby
+module Engine
+  module Reliability
+```
+
+*   Fix internal requires only if broken by path changes.
+
+Commit:
+
+```bash
+git commit -m "extract: reliability safeguards and trust boundaries"
+```
+
+***
+
+# 🧠 Step 4 — Context
+
+### Files
+
+    lib/engine/context/
+      analysis_context.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Context
+```
+
+Commit:
+
+```bash
+git commit -m "extract: analysis context handling"
+```
+
+***
+
+# 📚 Step 5 — Knowledge subsystem
+
+### Files
+
+    lib/engine/knowledge/
+      knowledge_authority.rb
+      knowledge_domain.rb
+      knowledge_registry.rb
+      knowledge_source.rb
+      knowledge_version.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Knowledge
+```
+
+Commit:
+
+```bash
+git commit -m "extract: knowledge model and registry"
+```
+
+***
+
+# ✅ Step 6 — Eligibility subsystem
+
+### Files
+
+    lib/engine/eligibility/
+      knowledge_eligibility_gate.rb
+      knowledge_eligibility_checker.rb
+      knowledge_eligibility_reason.rb
+      knowledge_eligibility_result.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Eligibility
+```
+
+Commit:
+
+```bash
+git commit -m "extract: knowledge eligibility evaluation"
+```
+
+***
+
+# 🌍 Step 7 — Grounding
+
+### Files
+
+    lib/engine/grounding/
+      grounded_explanation_controller.rb
+      document_adapter.rb
+      pdf_document_adapter.rb
+
+### Source
+
+*   `document_adapter.rb`, `pdf_document_adapter.rb` from adapter/
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Grounding
+```
+
+Commit:
+
+```bash
+git commit -m "extract: grounding and document adapters"
+```
+
+***
+
+# 🔄 Step 8 — Lifecycle
+
+### Files
+
+    lib/engine/lifecycle/
+      lifecycle_resolver.rb
+      reconciliation_life_cycle_map.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Lifecycle
+```
+
+Commit:
+
+```bash
+git commit -m "extract: lifecycle resolution logic"
+```
+
+***
+
+# 🧩 Step 9 — Templates
+
+### Files
+
+    lib/engine/templates/
+      mapping_error_template.rb
+      status_template.rb
+      terminal_status_template.rb
+      transitional_status_template.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Templates
+```
+
+Commit:
+
+```bash
+git commit -m "extract: response status and error templates"
+```
+
+***
+
+# 🗑️ Step 10 — Explicitly drop files (do nothing, but be conscious)
+
+Do **NOT** copy:
+
+*   `ai_structured_console.rb`
+*   milestone Dockerfiles
+*   milestone `.env.example`
+*   docker-compose.yml
+
+✅ These remain in journey repo history only.
+
+(No commit needed — just be intentional.)
+
+***
+
+# ✅ Step 11 — Sanity check
+
+Run:
+
+```bash
+bundle exec ruby -c lib/engine/**/*.rb
+```
+
+You are checking:
+
+*   syntax only
+*   not behavior
+
+***
+
+# 🏷️ Step 12 — Tag & merge
+
+```bash
+git tag v1.0.0-core
+git push origin extract-core --tags
+```
+
+Then PR → `main`.
+
+***
+
+# ✅ What `v1.0.0-core` guarantees
+
+*   ✅ All engine logic exists
+*   ✅ All logic is namespaced under `Engine::*`
+*   ✅ No orchestration
+*   ✅ No adapters
+*   ✅ No runtime coupling
+*   ✅ No YAML config yet
+
+This is a **clean, inert engine core**.
+
+***
+
+## 🔜 Next branch (preview only)
+
+Next you will do:
+
+> **`add-orchestrator` → v1.0.0-orchestrator**
+
+That’s where:
+
+*   `Engine::Analyzer`
+*   `lib/engine.rb`
+*   The single public contract
+
+…and the system finally becomes *callable*.
