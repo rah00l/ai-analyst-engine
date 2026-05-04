@@ -80,4 +80,4 @@ require_relative "engine/follow_up/boundary_responder"
 # -------------------------
 # Orchestrator (last)
 # -------------------------
-#require_relative "engine/analyzer"
+require_relative "engine/analyzer"
