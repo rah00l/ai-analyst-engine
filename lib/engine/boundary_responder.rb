@@ -9,8 +9,9 @@ module Engine
 # Provides a short, neutral message when a question
 # is outside the analyzer's responsibility.
 
-class BoundaryResponder
-  def respond
-    "I can explain system states and meanings, but I can’t provide operational or UI guidance."
+  class BoundaryResponder
+    def respond
+      "I can explain system states and meanings, but I can’t provide operational or UI guidance."
+    end
   end
 end

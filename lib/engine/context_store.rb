@@ -1,40 +1,39 @@
+  # frozen_string_literal: true
+
+  # ContextStore
+  #
+  # v0.10.0 — Contextual Reuse
+  #
+  # PURPOSE:
+  # Stores the most recent ExplanationContract for safe contextual reuse.
+  #
+  # DESIGN CONSTRAINTS:
+  # - Stores exactly one explanation
+  # - Read-only access
+  # - No mutation, inference, or enrichment
+  # - Cleared on session reset or overwrite
 module Engine
+  class ContextStore
+    def initialize
+      @last_explanation = nil
+    end
 
-# frozen_string_literal: true
+    def store(explanation_contract)
+      return unless explanation_contract
 
-# ContextStore
-#
-# v0.10.0 — Contextual Reuse
-#
-# PURPOSE:
-# Stores the most recent ExplanationContract for safe contextual reuse.
-#
-# DESIGN CONSTRAINTS:
-# - Stores exactly one explanation
-# - Read-only access
-# - No mutation, inference, or enrichment
-# - Cleared on session reset or overwrite
+      @last_explanation = explanation_contract
+    end
 
-class ContextStore
-  def initialize
-    @last_explanation = nil
-  end
+    def fetch
+      @last_explanation
+    end
 
-  def store(explanation_contract)
-    return unless explanation_contract
+    def clear
+      @last_explanation = nil
+    end
 
-    @last_explanation = explanation_contract
-  end
-
-  def fetch
-    @last_explanation
-  end
-
-  def clear
-    @last_explanation = nil
-  end
-
-  def empty?
-    @last_explanation.nil?
+    def empty?
+      @last_explanation.nil?
+    end
   end
 end

@@ -7,4 +7,6 @@ vendor/bundle
 log/
 tmp/
 
+tmp_load_all.rb
+
 .DS_Store
