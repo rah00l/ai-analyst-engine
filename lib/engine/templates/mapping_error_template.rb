@@ -22,7 +22,7 @@
 # Mapping errors could not be explained in v0.7 (grounding-only)
 # and v0.8 (intent-only). v0.9 introduces controlled explanation.
 
-require_relative '../explanation_contract'
+require_relative '../explanation/explanation_contract'
 
 module Engine
   module Templates

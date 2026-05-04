@@ -1,4 +1,4 @@
-module Engine
+
 # frozen_string_literal: true
 
 # BoundaryResponder
@@ -8,10 +8,12 @@ module Engine
 # PURPOSE:
 # Provides a short, neutral message when a question
 # is outside the analyzer's responsibility.
-
-  class BoundaryResponder
-    def respond
-      "I can explain system states and meanings, but I can’t provide operational or UI guidance."
+module Engine
+  module FollowUp
+    class BoundaryResponder
+      def respond
+        "I can explain system states and meanings, but I can’t provide operational or UI guidance."
+      end
     end
   end
 end
