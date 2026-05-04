@@ -1,4 +1,3 @@
-module Engine
 # frozen_string_literal: true
 
 # ExplanationContract
@@ -26,33 +25,34 @@ module Engine
 # FUTURE NOTE:
 # Later milestones (v1.x+, v2.x) may consume this struct
 # for UI, automation, or evaluation — do NOT change lightly.
+module Engine
+  ExplanationContract = Struct.new(
+    :concept_type,        # Symbol — e.g. :status, :status_blocking, :error_mapping
+    :blocking,            # true | false | :temporary
+    :ownership,           # String — who is responsible (Accounting, Ops, Support)
+    :meaning,             # String — document-safe interpretation
+    :impact,              # String — what cannot proceed because of this
+    :typical_next_step,   # Optional String — generic, non-procedural guidance
+    :notes,               # Optional String — caveats or clarifications
+    keyword_init: true
+  ) do
 
-ExplanationContract = Struct.new(
-  :concept_type,        # Symbol — e.g. :status, :status_blocking, :error_mapping
-  :blocking,            # true | false | :temporary
-  :ownership,           # String — who is responsible (Accounting, Ops, Support)
-  :meaning,             # String — document-safe interpretation
-  :impact,              # String — what cannot proceed because of this
-  :typical_next_step,   # Optional String — generic, non-procedural guidance
-  :notes,               # Optional String — caveats or clarifications
-  keyword_init: true
-) do
-
-  # Converts the ExplanationContract into a structured hash
-  # suitable for JSON serialization.
-  #
-  # IMPORTANT:
-  # - This controls presentation, not logic.
-  # - Do not embed business rules here.
-  def to_h
-    {
-      concept_type: concept_type,
-      blocking: blocking,
-      ownership: ownership,
-      meaning: meaning,
-      impact: impact,
-      typical_next_step: typical_next_step,
-      notes: notes
-    }.compact
+    # Converts the ExplanationContract into a structured hash
+    # suitable for JSON serialization.
+    #
+    # IMPORTANT:
+    # - This controls presentation, not logic.
+    # - Do not embed business rules here.
+    def to_h
+      {
+        concept_type: concept_type,
+        blocking: blocking,
+        ownership: ownership,
+        meaning: meaning,
+        impact: impact,
+        typical_next_step: typical_next_step,
+        notes: notes
+      }.compact
+    end
   end
 end
