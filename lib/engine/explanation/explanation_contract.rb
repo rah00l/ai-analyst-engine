@@ -26,7 +26,7 @@
 # Later milestones (v1.x+, v2.x) may consume this struct
 # for UI, automation, or evaluation — do NOT change lightly.
 module Engine
-  module Explaination
+  module Explanation
     ExplanationContract = Struct.new(
       :concept_type,        # Symbol — e.g. :status, :status_blocking, :error_mapping
       :blocking,            # true | false | :temporary

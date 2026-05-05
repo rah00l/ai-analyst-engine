@@ -37,7 +37,7 @@ module Engine
       private
 
       def build_full_reconciled(classification)
-        ExplanationContract.new(
+       Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: false,
           ownership: classification[:ownership],

@@ -17,14 +17,20 @@ post "/analyze" do
       halt 400, { error: "Invalid JSON payload" }.to_json
     end
 
-  text = request_payload["text"]
+  question = request_payload["question"]
   context = request_payload["context"] || {}
 
-  unless text.is_a?(String) && !text.strip.empty?
-    halt 422, { error: "text must be a non-empty string" }.to_json
+  unless question.is_a?(String) && !question.strip.empty?
+    halt 422, { error: "question must be a non-empty string" }.to_json
     end
 
-  result = Engine::Analyzer.analyze(text: text, context: context)
+  # result = Engine::Analyzer.analyze(question: body["question"] || body["question"], context: {})
+  
+result = Engine::Analyzer.analyze(
+  question: question,
+  context: request_payload["context"] || {}
+)
+
 
   { result: result }.to_json
 end

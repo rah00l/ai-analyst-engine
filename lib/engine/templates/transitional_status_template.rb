@@ -36,7 +36,7 @@ module Engine
       # NEW
       # ------------------------------------------------------------
       def build_new(classification)
-        ExplanationContract.new(
+        Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: false,
           ownership: classification[:ownership],
@@ -53,7 +53,7 @@ module Engine
       # READY
       # ------------------------------------------------------------
       def build_ready(classification)
-        ExplanationContract.new(
+        Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: false,
           ownership: classification[:ownership],
@@ -70,7 +70,7 @@ module Engine
       # PROCESSING
       # ------------------------------------------------------------
       def build_processing(classification)
-        ExplanationContract.new(
+        Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: false,
           ownership: classification[:ownership],
@@ -87,7 +87,7 @@ module Engine
       # PARSED
       # ------------------------------------------------------------
       def build_parsed(classification)
-        ExplanationContract.new(
+        Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: false,
           ownership: classification[:ownership],

@@ -25,7 +25,7 @@
 # When adding new concepts, update classification here —
 # never inside templates or explanation builder.
 module Engine
-  module Explaination
+  module Explanation
     class ConceptClassifier  
        # ----------------------------------------------------------
        # v0.10 — Transitional (non‑blocking) lifecycle states

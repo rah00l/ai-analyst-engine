@@ -28,7 +28,7 @@ module Engine
   module Templates
     class MappingErrorTemplate
       def build(term, classification)
-        ExplanationContract.new(
+        Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: classification[:blocking],
           ownership: classification[:ownership],

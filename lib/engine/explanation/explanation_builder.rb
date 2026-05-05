@@ -27,7 +27,7 @@ require_relative "../templates/terminal_status_template"
 # - If explain(term) returns a contract → it is authoritative
 # ============================================================
 module Engine
-  module Explaination
+  module Explanation
     class ExplanationBuilder
       def initialize
         @classifier = ConceptClassifier.new
@@ -53,21 +53,21 @@ module Engine
         # v0.7 — Mapping / parsing error explanations
         # ----------------------------------------------------------
         when :error_mapping
-          MappingErrorTemplate.new.build(term, classification)
+          Engine::Templates::MappingErrorTemplate.new.build(term, classification)
 
         # ----------------------------------------------------------
         # v0.9 — Blocking lifecycle states
         # Example: PARTIAL RECONCILED
         # ----------------------------------------------------------
         when :status_blocking
-          StatusTemplate.new.build(term, classification)
+          Engine::Templates::StatusTemplate.new.build(term, classification)
 
         # ----------------------------------------------------------
         # v0.9 — Terminal lifecycle states
         # Example: FULL RECONCILED
         # ----------------------------------------------------------
         when :status_terminal
-          TerminalStatusTemplate.new.build(term, classification)
+          Engine::Templates::TerminalStatusTemplate.new.build(term, classification)
 
         # ----------------------------------------------------------
         # v0.10 — Transitional lifecycle states
@@ -79,7 +79,7 @@ module Engine
         # - Analyst‑focused visibility only
         # ----------------------------------------------------------
         when :status_transitional
-          TransitionalStatusTemplate.new.build(term, classification)
+          Engine::Templates::TransitionalStatusTemplate.new.build(term, classification)
 
         else
           # Concept supported by grounding but not yet modeled

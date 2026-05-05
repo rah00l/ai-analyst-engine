@@ -40,7 +40,7 @@ module Engine
       private
 
       def build_partial_reconciled(classification)
-        ExplanationContract.new(
+       Engine::Explanation::ExplanationContract.new(
           concept_type: classification[:concept_type],
           blocking: classification[:blocking],
           ownership: classification[:ownership],

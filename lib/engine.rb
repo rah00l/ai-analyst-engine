@@ -3,6 +3,7 @@
 # Root namespace (optional but good practice)
 module Engine; end
 
+# require "debug"
 # -------------------------
 # Context (lowest-level state)
 # -------------------------
