@@ -43,9 +43,9 @@ module Engine
             id: "RECONCILIATION_HANDBOOK",
             name: "Payment Reconciliation Handbook",
             description: "Defines reconciliation statuses, meanings, and rules for payment files.",
-            authority_level: KnowledgeAuthority::POLICY,
+            authority_level: Engine::Knowledge::KnowledgeAuthority::POLICY,
             domain_scope: [:reconciliation],
-            version: ::KnowledgeVersion.new(
+            version: Engine::Knowledge::KnowledgeVersion.new(
               version_id: "v2.1",
               effective_from: Time.utc(2025, 1, 1),
               status: :active

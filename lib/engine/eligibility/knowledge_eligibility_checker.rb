@@ -20,7 +20,7 @@ module Engine
       # Shared default checker instance (read-only, stateless usage)
       def self.default
         @default ||= new(
-          knowledge_registry: KnowledgeRegistry.default
+          knowledge_registry: Engine::Knowledge::KnowledgeRegistry.default
         )
       end
 
@@ -40,10 +40,10 @@ module Engine
       def authority_sufficient?(sources, intent)
         case intent
         when :policy
-          sources.any? { |s| s.authority_level == KnowledgeAuthority::POLICY }
+          sources.any? { |s| s.authority_level == Engine::Knowledge::KnowledgeAuthority::POLICY }
         when :definition
           sources.any? do |s|
-            [KnowledgeAuthority::POLICY, KnowledgeAuthority::REFERENCE]
+            [Engine::Knowledge::KnowledgeAuthority::POLICY, Engine::Knowledge::KnowledgeAuthority::REFERENCE]
               .include?(s.authority_level)
           end
         else
