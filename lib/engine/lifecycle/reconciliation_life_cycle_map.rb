@@ -11,19 +11,20 @@
 # - This class is READ‑ONLY
 # - No business logic should mutate lifecycle order
 # ============================================================
+# lib/engine/lifecycle/reconciliation_life_cycle_map.rb
+require "yaml"
+
 module Engine
   module Lifecycle
     class ReconciliationLifecycleMap
-      FLOW = [
-        "NEW",
-        "READY",
-        "PROCESSING",
-        "PARSED",
-        "TRAN RECONCILING",
-        "RECONCILING",
-        "PARTIAL RECONCILED",
-        "FULL RECONCILED"
-      ].freeze
+      LIFECYCLE_PATH = File.expand_path(
+        "../../../../resources/accounting/lifecycle.yml",
+        __FILE__
+      )
+
+      config = YAML.load_file(LIFECYCLE_PATH)
+      FLOW = config.fetch("flow").freeze
+      TERMINAL = config.fetch("terminal").freeze
 
       def self.next_stage(current)
         index = FLOW.index(current)
@@ -32,7 +33,7 @@ module Engine
       end
 
       def self.terminal?(status)
-        status == "FULL RECONCILED"
+        status == TERMINAL
       end
     end
   end

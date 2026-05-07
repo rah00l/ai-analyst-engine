@@ -1,0 +1,46 @@
+# resources/accounting/concepts.yml
+# Canonical alias map — loaded by AliasMap at startup
+# Format: "normalised phrase" => "CANONICAL TERM"
+
+aliases:
+  # PARSED
+  "parsing": "PARSED"
+  "parse": "PARSED"
+  "parsed": "PARSED"
+  "file parsed": "PARSED"
+  "file parsing completed": "PARSED"
+
+  # NEW / READY / PROCESSING
+  "new": "NEW"
+  "file uploaded": "NEW"
+  "ready": "READY"
+  "ready for parsing": "READY"
+  "processing": "PROCESSING"
+  "file processing": "PROCESSING"
+  "processing file": "PROCESSING"
+
+  # PARTIAL / FULL RECONCILED
+  "partial reconciliation": "PARTIAL RECONCILED"
+  "partially reconciled": "PARTIAL RECONCILED"
+  "partial reconciled": "PARTIAL RECONCILED"
+  "partial reconciled lifecycle": "PARTIAL RECONCILED"
+  "what does partial reconciled indicate": "PARTIAL RECONCILED"
+  "fully reconciled": "FULL RECONCILED"
+  "full reconciliation": "FULL RECONCILED"
+  "full reconciled": "FULL RECONCILED"
+
+  # RECONCILING — was missing from templates, now included
+  "reconciling": "RECONCILING"
+  "ready for reconciliation": "RECONCILING"
+  "tran reconciling": "TRAN RECONCILING"
+  "transaction reconciling": "TRAN RECONCILING"
+
+  # MAPPING ERRORS
+  "mapping error payment id not found": "MAPPING ERROR - Payment ID Not Found"
+  "mapping error payment id": "MAPPING ERROR - Payment ID Not Found"
+  "payment id not found": "MAPPING ERROR - Payment ID Not Found"
+  "mapping error data format issue": "MAPPING ERROR - Data Format Issue"
+  "data format issue": "MAPPING ERROR - Data Format Issue"
+  "parsing error": "PARSING ERROR - Contact Support"
+  "reconciling error": "RECONCILING ERROR - Contact Support"
+  "reconciliation error": "RECONCILING ERROR - Contact Support"

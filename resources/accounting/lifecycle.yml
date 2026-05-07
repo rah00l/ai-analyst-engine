@@ -1,0 +1,12 @@
+# resources/accounting/lifecycle.yml
+flow:
+  - "NEW"
+  - "READY"
+  - "PROCESSING"
+  - "PARSED"
+  - "TRAN RECONCILING"
+  - "RECONCILING"
+  - "PARTIAL RECONCILED"
+  - "FULL RECONCILED"
+
+terminal: "FULL RECONCILED"

@@ -134,6 +134,41 @@ curl -X POST http://localhost:4567/analyze \
 # What does PARTIAL RECONCILED indicate in the lifecycle?
 # Is FULL RECONCILED a terminal state?
 
+# CATEGORY 5 — Comparative Reasoning (High‑Value Analyst Use)
+# What is the difference between PARTIAL RECONCILED and FULL RECONCILED?
+# How is MAPPING ERROR different from PARSING ERROR?
+# How is TRAN RECONCILING different from RECONCILING?
+
+# CATEGORY 6 — “What If” / Counterfactual (Boundary Tests)
+# What happens if a file stays in PARTIAL RECONCILED?
+# What does it mean if reconciliation never completes?
+# What happens if multiple payment IDs exist?
+
+# CATEGORY 7 — Explicit Boundary Enforcement (Should Refuse)
+# What should I do next?
+# How do I fix this error?
+# Which button should I click?
+# Can I re-upload the file?
+# How do I reconcile tenancy?
+
+# CATEGORY 8 — Follow‑Up Chains (v0.10 Stress Test)
+# What does MAPPING ERROR – Payment ID Not Found mean?
+# → Does this block reconciliation?
+# → Who owns this?
+# → What happens if nothing is done?
+
+# Another chain:
+# What does PARTIAL RECONCILED mean?
+# → Is reconciliation complete?
+# → What remains pending?
+# → Who is responsible?
+
+# CATEGORY 9 — Next‑Phase (v1.x Preview Questions)
+# Why are some tenancies left unsettled?
+# What determines whether reconciliation is partial?
+# What causes tenancy mismatches?
+
+
 
 # curl -X POST http://localhost:4567/analyze \
 #   -H "Content-Type: application/json" \
