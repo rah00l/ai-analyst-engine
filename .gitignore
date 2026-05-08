@@ -5,7 +5,11 @@ vendor/bundle
 .env.local
 
 log/
-tmp/
+# -------------------------------------------------
+# Internal notes / brainstorming (non-public)
+# -------------------------------------------------
+docs/internal/
+
 
 tmp_load_all.rb
 
