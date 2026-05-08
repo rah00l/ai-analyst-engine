@@ -191,12 +191,16 @@ Move all 35 files from journey repo into correct engine folders. One commit per 
 
 branch: add-orchestrator
 Write Engine::Analyzer — the single public entry point. Write lib/engine.rb require chain. Merge → tag v1.0.0-orchestrator
+
 branch: sinatra-adapter
 Write sinatra/app.rb — POST /analyze → Engine::Analyzer.analyze → JSON. Write config.ru. Local test. Merge → tag v1.0.0-api
+
 branch: resources
 Extract alias_map into concepts.yml. Extract lifecycle_map into lifecycle.yml. Update engine to load from YAML. Merge → tag v1.0.0-resources
 tag: v1.0.0 RELEASE
+
 Engine is complete, tested via bin/console, Sinatra endpoint live. This is the version the demo app depends on.
+
 Repo 2: ai-reconciliation-demo — branch + tag strategy
 branch: setup
 rails new, Tailwind, Gemfile, Dockerfile. Merge → tag v0.1.0-scaffold
@@ -221,6 +225,7 @@ fix(eligibility): correct DENY reason when domain mismatch
 docs(readme): add architecture diagram and live demo link
 chore(docker): update compose for two-service engine + demo
 Format: type(scope): description — conventional commits standard. Makes your git log readable to any engineer who reviews the repo.
+
 Locked decisions — four answers
 Q1
 Approach is correct. Two corrections: rename engine repo, add architecture diagram to README.

@@ -1,0 +1,70 @@
+
+Stratergies and approach - 
+Question 1 — Is the approach right?
+What is confirmed ✓
+Two repos — engine + demo — correct split
+Sinatra as HTTP adapter only — right decision
+Tailwind CSS — right choice, ships well with Rails 7
+Minimal README for engine — exactly right
+Read-only screens + fictional data — correct
+What you are NOT building list — perfectly scoped
+What needs adjustment →
+
+Repo 1: ai-analyst-engine — branch + tag strategy
+
+branch: main
+Protected. Only receives merges from feature branches. Never commit directly.
+
+branch: setup
+Initial scaffold, Gemfile, Dockerfile, .env.example, README skeleton. Merge → tag v1.0.0-scaffold
+
+branch: extract-core
+Move all 35 files from journey repo into correct engine folders. One commit per logical group: intent/, knowledge/, eligibility/, etc. Merge → tag v1.0.0-core
+
+branch: add-orchestrator
+Write Engine::Analyzer — the single public entry point. Write lib/engine.rb require chain. Merge → tag v1.0.0-orchestrator
+
+branch: sinatra-adapter
+Write sinatra/app.rb — POST /analyze → Engine::Analyzer.analyze → JSON. Write config.ru. Local test. Merge → tag v1.0.0-api
+
+branch: resources
+Extract alias_map into concepts.yml. Extract lifecycle_map into lifecycle.yml. Update engine to load from YAML. Merge → tag v1.0.0-resources
+tag: v1.0.0 RELEASE
+
+Engine is complete, tested via bin/console, Sinatra endpoint live. This is the version the demo app depends on.
+
+Repo 2: ai-reconciliation-demo — branch + tag strategy
+
+branch: setup
+rails new, Tailwind, Gemfile, Dockerfile. Merge → tag v0.1.0-scaffold
+
+branch: seed-data
+Models: PaymentFile, Transaction, Merchant. db/seeds.rb with fictional data. Merge → tag v0.1.0-data
+
+branch: screens-1-2
+Upload list screen + Display screen. Read-only. Tailwind tables. Merge → tag v0.2.0-screens-1-2
+
+branch: screens-3-4-5
+Missing screen (colour-coded rows) + Tenancy + Final summary. Merge → tag v0.3.0-screens-3-4-5
+
+branch: chat-integration
+Stimulus chat controller. POST /analyze to engine. Turbo Stream renders ExplanationContract. Chat widget on all screens. Merge → tag v0.4.0-chat
+
+branch: deploy
+Render.com config, Docker Compose end-to-end test, README with live link + demo GIF. Merge → tag v0.5.0-live
+tag: v1.0.0 PORTFOLIO RELEASE
+Both repos live. Demo recorded. README complete. This is the version you share with hiring managers.
+
+Commit message format — lock this convention
+feat(intent): add alias_map extraction to concepts.yml
+feat(sinatra): add POST /analyze endpoint with JSON response
+refactor(engine): introduce Engine::Analyzer orchestrator
+refactor(grounding): reorganise adapter into grounding/ subfolder
+fix(eligibility): correct DENY reason when domain mismatch
+docs(readme): add architecture diagram and live demo link
+chore(docker): update compose for two-service engine + demo
+
+Format: type(scope): description — conventional commits standard. Makes your git log readable to any engineer who reviews the repo.
+
+
+

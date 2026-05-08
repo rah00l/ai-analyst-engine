@@ -4,15 +4,15 @@ session_id = "DEBUG_S1"
 
 puts "---- STEP 1: base explanation ----"
 res1 = Engine::Analyzer.analyze(
-  question: "What stage comes after PARSED?",
+  question: "Explain PARSED",
   context: { session_id: session_id }
 )
 puts res1
 
 
-curl -X POST http://localhost:4567/analyze \
-  -H "Content-Type: application/json" \
-  -d '{"session_id":"S1","question":"What does PARTIAL RECONCILED indicate in the lifecycle?"}'
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"session_id":"S1","question":"Explain PARSED"}'
 
 # ✅ STORE ONLY THE EXPLANATION CONTRACT
 # prior_explanation = res1[:result]

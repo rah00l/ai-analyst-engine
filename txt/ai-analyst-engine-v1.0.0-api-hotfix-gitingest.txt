@@ -1,0 +1,4013 @@
+Directory structure:
+└── rah00l-ai-analyst-engine/
+    ├── readme.md
+    ├── Dockerfile
+    ├── Gemfile
+    ├── .env.example 
+    ├── lib/
+    │   ├── engine.rb
+    │   └── engine/
+    │       ├── analyzer.rb
+    │       ├── context/
+    │       │   └── analysis_context.rb
+    │       ├── eligibility/
+    │       │   ├── knowledge_eligibility_checker.rb
+    │       │   ├── knowledge_eligibility_gate.rb
+    │       │   ├── knowledge_eligibility_reason.rb
+    │       │   └── knowledge_eligibility_result.rb
+    │       ├── explanation/
+    │       │   ├── concept_classifier.rb
+    │       │   ├── explanation_builder.rb
+    │       │   └── explanation_contract.rb
+    │       ├── follow_up/
+    │       │   ├── boundary_responder.rb
+    │       │   ├── context_store.rb
+    │       │   ├── follow_up_classifier.rb
+    │       │   └── projection_resolver.rb
+    │       ├── grounding/
+    │       │   ├── document_adapter.rb
+    │       │   ├── grounded_explanation_controller.rb
+    │       │   └── pdf_document_adapter.rb
+    │       ├── intent/
+    │       │   ├── alias_map.rb
+    │       │   ├── canonicalizer.rb
+    │       │   ├── intent_contract.rb
+    │       │   └── intent_resolver.rb
+    │       ├── knowledge/
+    │       │   ├── knowledge_authority.rb
+    │       │   ├── knowledge_domain.rb
+    │       │   ├── knowledge_registry.rb
+    │       │   ├── knowledge_source.rb
+    │       │   └── knowledge_version.rb
+    │       ├── lifecycle/
+    │       │   ├── lifecycle_resolver.rb
+    │       │   └── reconciliation_life_cycle_map.rb
+    │       ├── reliability/
+    │       │   ├── ai_call_boundary.rb
+    │       │   ├── cost_guard.rb
+    │       │   ├── failure_classification.rb
+    │       │   ├── latency_budget.rb
+    │       │   ├── retry_policy.rb
+    │       │   ├── safety_fallback.rb
+    │       │   └── trust_contract.rb
+    │       └── templates/
+    │           ├── mapping_error_template.rb
+    │           ├── status_template.rb
+    │           ├── terminal_status_template.rb
+    │           └── transitional_status_template.rb
+    ├── script/
+    │   └── debug_analyzer.rb
+    ├── sinatra/
+    │   ├── app.rb
+    │   └── config.ru
+    └── txt/
+        ├── ai-analyst-engine.md
+        ├── ai-analyst-engine.txt
+        ├── ai-engine-stratergy-approach.txt
+        ├── extract-core.txt
+        ├── file-scaffold.txt
+        └── payment_reconcilation.txt
+
+================================================
+FILE: readme.md
+================================================
+# ai-analyst-engine
+
+A pure reasoning engine that analyzes natural language input and produces structured explanations.
+
+This repository contains a **pure reasoning engine**.
+No UI, no persistence, no external dependencies beyond Ruby standard libraries (adapters excluded).
+
+---
+
+## What the engine does
+
+- Accepts natural language questions
+- Resolves intent and canonical domain concepts
+- Produces a deterministic, structured explanation output
+- Supports multi-turn follow-up questions when session context is provided
+
+---
+
+## How to call it
+
+The engine exposes a single public entry point:
+
+```ruby
+Engine::Analyzer.analyze(question:, context: {})
+````
+
+*   `question` — a natural language string
+*   `context` — optional structured metadata
+
+For multi-turn or follow-up questions (for example, ownership, impact, or next actions),
+callers may provide a `session_id` and a prior explanation via `context`
+to enable conversational continuity.
+
+***
+
+## What it returns
+
+A structured Ruby hash representing the explanation result.
+
+Typical fields include:
+
+*   status
+*   concept type or classification
+*   explanation payload
+
+The exact shape is defined by the explanation contract.
+
+***
+
+## How to run it
+
+### Programmatic usage
+
+```ruby
+require "engine"
+
+Engine::Analyzer.analyze(
+  question: "What does PARSED mean?"
+)
+```
+
+***
+
+### HTTP API (Sinatra adapter)
+
+Start the service (Docker recommended):
+
+```bash
+docker build -t ai-analyst-engine .
+docker run --rm -p 4567:4567 ai-analyst-engine
+```
+
+***
+
+### First-turn request
+
+```bash
+curl -X POST http://localhost:4567/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"S1","question":"What does PARTIAL RECONCILED mean?"}'
+```
+
+***
+
+### Follow-up request (same session)
+
+```bash
+curl -X POST http://localhost:4567/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"S1","question":"Does this stop reconciliation?"}'
+```
+
+For follow-up questions, the same `session_id` **must be reused**
+so the engine can apply the prior explanation as conversational context.
+
+If a new `session_id` is used, the engine treats the request as a new,
+independent analysis and follow-up questions may return `NOT_DEFINED`.
+
+***
+
+
+================================================
+FILE: Dockerfile
+================================================
+FROM ruby:3.2-slim
+
+WORKDIR /app
+
+# Install gems
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+
+# Copy app
+COPY . .
+
+# Environment
+ENV RACK_ENV=development
+ENV PORT=4567
+
+EXPOSE 4567
+
+# Run Sinatra via Rack
+CMD ["bundle", "exec", "rackup", "sinatra/config.ru", "-o", "0.0.0.0", "-p", "4567"]
+
+
+================================================
+FILE: Gemfile
+================================================
+source "https://rubygems.org"
+
+ruby ">= 3.1.0"
+
+# Runtime (adapter-level only, not engine logic)
+gem "sinatra", "~> 3.0"
+
+# Dev / local execution
+group :development do
+  gem "rackup"
+end
+
+
+================================================
+FILE: .env.example 
+================================================
+# Environment
+RACK_ENV=development
+
+# App adapter (used later)
+PORT=4567
+
+
+================================================
+FILE: lib/engine.rb
+================================================
+# frozen_string_literal: true
+
+# Root namespace (optional but good practice)
+module Engine; end
+
+# require "debug"
+# -------------------------
+# Context (lowest-level state)
+# -------------------------
+require_relative "engine/context/analysis_context"
+
+# -------------------------
+# Reliability (cross-cutting concerns)
+# -------------------------
+require_relative "engine/reliability/retry_policy"
+require_relative "engine/reliability/latency_budget"
+require_relative "engine/reliability/cost_guard"
+require_relative "engine/reliability/failure_classification"
+require_relative "engine/reliability/safety_fallback"
+require_relative "engine/reliability/trust_contract"
+require_relative "engine/reliability/ai_call_boundary"
+
+# -------------------------
+# Knowledge layer
+# -------------------------
+require_relative "engine/knowledge/knowledge_version"
+require_relative "engine/knowledge/knowledge_domain"
+require_relative "engine/knowledge/knowledge_source"
+require_relative "engine/knowledge/knowledge_authority"
+require_relative "engine/knowledge/knowledge_registry"
+
+# -------------------------
+# Eligibility checks
+# -------------------------
+require_relative "engine/eligibility/knowledge_eligibility_reason"
+require_relative "engine/eligibility/knowledge_eligibility_result"
+require_relative "engine/eligibility/knowledge_eligibility_checker"
+require_relative "engine/eligibility/knowledge_eligibility_gate"
+
+# -------------------------
+# Lifecycle
+# -------------------------
+require_relative "engine/lifecycle/reconciliation_life_cycle_map"
+require_relative "engine/lifecycle/lifecycle_resolver"
+
+# -------------------------
+# Grounding
+# -------------------------
+require_relative "engine/grounding/document_adapter"
+require_relative "engine/grounding/pdf_document_adapter"
+require_relative "engine/grounding/grounded_explanation_controller"
+
+# -------------------------
+# Intent processing
+# -------------------------
+require_relative "engine/intent/intent_contract"
+require_relative "engine/intent/alias_map"
+require_relative "engine/intent/canonicalizer"
+require_relative "engine/intent/intent_resolver"
+
+# -------------------------
+# Explanation
+# -------------------------
+require_relative "engine/explanation/concept_classifier"
+require_relative "engine/explanation/explanation_contract"
+require_relative "engine/explanation/explanation_builder"
+
+require_relative "engine/templates/mapping_error_template"
+require_relative "engine/templates/status_template"
+require_relative "engine/templates/terminal_status_template"
+require_relative "engine/templates/transitional_status_template"
+
+# -------------------------
+# Follow-up & continuity
+# -------------------------
+require_relative "engine/follow_up/context_store"
+require_relative "engine/follow_up/follow_up_classifier"
+require_relative "engine/follow_up/projection_resolver"
+require_relative "engine/follow_up/boundary_responder"
+
+# -------------------------
+# Orchestrator (last)
+# -------------------------
+require_relative "engine/analyzer"
+
+
+================================================
+FILE: lib/engine/analyzer.rb
+================================================
+# frozen_string_literal: true
+
+require "securerandom"
+
+module Engine
+  class Analyzer
+
+    # ============================================================
+    # Base system prompt — used by grounded controller
+    # ============================================================
+    BASE_SYSTEM_PROMPT = <<~PROMPT
+      You are an AI analyst assistant for a payment reconciliation system.
+      You explain system states and errors to accounting teams.
+      You do not perform actions. You do not operate the system.
+    PROMPT
+
+    # ============================================================
+    # Public entry point
+    #
+    # question: String  — raw user question
+    # context:  Hash    — optional session/file state overrides
+    #
+    # Returns: Hash (ExplanationContract fields, or status/message)
+    # ============================================================
+    def self.analyze(question:, context: {})
+      new(question: question, context: context).call
+    end
+
+    # ----------------------------------------------------------
+    # Initialiser — wires all components
+    # ----------------------------------------------------------
+    def initialize(question:, context: {})
+      @question = question
+      @context  = context
+
+      # v0.10 — session-persistent explanation for follow-up reuse
+      # In a stateless HTTP call this starts nil every request.
+      # The caller (Sinatra) may pass a prior explanation via context
+      # to enable follow-up projection across requests.
+      @session_contextual_explanation = context[:prior_explanation]
+
+      # Reliability components
+      @ai = Reliability::AiCallBoundary.new(
+        api_key: ENV["OPENAI_API_KEY"],
+        model:   ENV.fetch("OPENAI_MODEL", "gpt-4o-mini")
+      )
+
+      # Grounding components
+      @document_adapter    = Grounding::PdfDocumentAdapter.new
+      @grounded_controller = Grounding::GroundedExplanationController.new(
+        document_adapter: @document_adapter,
+        ai: @ai
+      )
+    end
+
+    # ----------------------------------------------------------
+    # call — the full pipeline, matching ai_structured_console.rb
+    # ----------------------------------------------------------
+    def call
+      Reliability::LatencyBudget.start!
+      Reliability::CostGuard.start!
+
+      attempt = 0
+
+      loop do
+        begin
+          Reliability::CostGuard.record!
+
+          result = execute_pipeline
+
+          return Reliability::TrustContract.success(result)
+
+        rescue => e
+          failure = Reliability::FailureClassification.classify(e)
+          break unless Reliability::RetryPolicy.retry?(failure, attempt)
+          break if Reliability::LatencyBudget.exceeded?
+          break if Reliability::CostGuard.exceeded?
+          attempt += 1
+        end
+      end
+
+      # Safety fallback — reliability layer exhausted
+      Reliability::TrustContract.success(
+        Reliability::SafetyFallback.build(:RELIABILITY_EXHAUSTED)
+      )
+    end
+
+    private
+
+    # ----------------------------------------------------------
+    # execute_pipeline
+    #
+    # Mirrors the exact execution order in ai_structured_console.rb:
+    #
+    # 1. Infer focus from question
+    # 2. Build AnalysisContext
+    # 3. Determine blocking condition
+    # 4. Check knowledge eligibility
+    # 5. If eligible → resolve intent → ExplanationBuilder
+    #    If ExplanationBuilder nil → GroundedExplanationController
+    # 6. If result nil → follow-up classification and projection
+    # 7. If result still nil → NOT_DEFINED (no LLM fallback in engine)
+    # ----------------------------------------------------------
+    def execute_pipeline
+      # --------------------------------------------------------
+      # Step 1 — Infer focus from question pattern
+      # Phase 5.2 equivalent
+      # --------------------------------------------------------
+      focus = infer_focus(@question)
+
+      # --------------------------------------------------------
+      # Step 2 — Build AnalysisContext with safe defaults
+      # Phase 5.4 equivalent
+      # --------------------------------------------------------
+      file_state = @context[:file_state] || { status: "UNKNOWN", status_category: "UNKNOWN" }
+
+      base_context = Context::AnalysisContext.new(
+        session_id:         @context[:session_id]       || SecureRandom.uuid,
+        subject:            @context[:subject]          || { type: "payment_file", id: "UNKNOWN" },
+        file_state:         file_state,
+        current_focus:      focus,
+        reasoning_budget:   @context[:reasoning_budget] || { turns_remaining: 2 },
+        lifecycle:          @context[:lifecycle]        || { state: :ACTIVE, created_at: Time.now },
+        blocking_condition: nil
+      )
+
+      # --------------------------------------------------------
+      # Step 3 — Determine blocking condition
+      # Phase 5.3 equivalent
+      # --------------------------------------------------------
+      context = Context::AnalysisContext.new(
+        **base_context.to_h,
+        blocking_condition: determine_blocking(base_context)
+      )
+
+      # Inject prior explanation for follow-up reuse
+      context.contextual_explanation = @session_contextual_explanation
+
+      # --------------------------------------------------------
+      # Step 4 — Knowledge eligibility gate
+      # Phase 6.x equivalent — MUST happen before any explanation
+      # --------------------------------------------------------
+      eligibility = Eligibility::KnowledgeEligibilityGate.evaluate(
+        intent: context.current_focus,
+        domain: :reconciliation
+      )
+
+      result = nil
+
+      # --------------------------------------------------------
+      # Step 5 — Grounded execution fork
+      # Phase 7.0 equivalent
+      #
+      # IMPORTANT: System lifecycle statuses (PARTIAL RECONCILED,
+      # FULL RECONCILED etc.) bypass grounding — they are answered
+      # directly by ExplanationBuilder from the templates.
+      # --------------------------------------------------------
+      if eligibility.allowed?
+        intent = Intent::IntentResolver.new.resolve(@question)
+
+        if intent
+          explanation = Explanation::ExplanationBuilder.new.explain(intent.term)
+
+          if explanation
+            # System-state explanation — authoritative, no LLM needed
+            @session_contextual_explanation = explanation
+            context.contextual_explanation  = explanation
+            result = explanation
+          else
+            # Term recognised by intent but not in templates →
+            # fall through to handbook-backed grounding
+            result = @grounded_controller.explain(
+              context:       context,
+              eligibility:   eligibility,
+              source:        intent.source,
+              section:       intent.section,
+              version:       intent.version,
+              term:          intent.term,
+              system_prompt: BASE_SYSTEM_PROMPT,
+              user_prompt:   @question
+            )
+          end
+        end
+      end
+
+      # --------------------------------------------------------
+      # Step 6 — Contextual follow-up reuse
+      # v0.10.0 equivalent — READ ONLY, no new LLM calls
+      # Only fires when Step 5 produced no result
+      # --------------------------------------------------------
+      if result.nil? && context.contextual_explanation
+        classification = FollowUp::FollowUpClassifier.new.classify(@question)
+
+        result =
+          case classification
+          when :lifecycle_next
+            state = extract_lifecycle_term_from_input(@question) ||
+                    extract_lifecycle_term_from_context(context.contextual_explanation)
+            Lifecycle::LifecycleResolver.new.resolve_next_stage(state)
+
+          when :out_of_scope
+            FollowUp::BoundaryResponder.new.respond
+
+          when :unknown
+            nil # falls through to Step 7
+
+          else
+            # :blocking_query, :ownership_query, :completion_query, :impact_query
+            FollowUp::ProjectionResolver.new.resolve(
+              classification,
+              context.contextual_explanation
+            )
+          end
+      end
+
+      # --------------------------------------------------------
+      # Step 7 — NOT_DEFINED
+      #
+      # Deliberate engine decision: no LLM fallback here.
+      # The engine is deterministic. The demo app layer may add
+      # LLM fallback above the engine if desired.
+      # --------------------------------------------------------
+      result || {
+        status:  "NOT_DEFINED",
+        message: "This question could not be answered from the reconciliation knowledge base."
+      }
+    end
+
+    # ----------------------------------------------------------
+    # infer_focus — mirrors Phase 5.2 from console exactly
+    # ----------------------------------------------------------
+    def infer_focus(input)
+      case input
+      when /what does|what is|meaning of/i
+        :status_meaning
+      when /what should I do|next|proceed/i
+        :next_action
+      when /why|error|failed|problem|cause/i
+        :error_meaning
+      else
+        :status_meaning
+      end
+    end
+
+    # ----------------------------------------------------------
+    # determine_blocking — mirrors Phase 5.3 from console exactly
+    # ----------------------------------------------------------
+    def determine_blocking(context)
+      focus  = context.current_focus
+      status = context.file_state[:status]
+
+      blocking = { is_blocked: false, reason: nil, responsibility: :NONE }
+
+      if focus == :error_meaning
+        case status
+        when "MAPPING_ERROR"
+          blocking = {
+            is_blocked:     true,
+            reason:         :INSUFFICIENT_TRANSACTION_CONTEXT,
+            responsibility: :USER
+          }
+        when "PROCESSING"
+          blocking = {
+            is_blocked:     true,
+            reason:         :SYSTEM_STILL_PROCESSING,
+            responsibility: :SYSTEM
+          }
+        end
+      end
+
+      blocking
+    end
+
+    # ----------------------------------------------------------
+    # extract_lifecycle_term_from_input
+    # Mirrors the console helper exactly
+    # ----------------------------------------------------------
+    def extract_lifecycle_term_from_input(input)
+      Lifecycle::ReconciliationLifecycleMap::FLOW.find do |status|
+        input.upcase.include?(status)
+      end
+    end
+
+    # ----------------------------------------------------------
+    # extract_lifecycle_term_from_context
+    # Derives lifecycle term from a stored ExplanationContract
+    # ----------------------------------------------------------
+    def extract_lifecycle_term_from_context(explanation)
+      return nil unless explanation.respond_to?(:concept_type)
+
+      case explanation.concept_type
+      when :status_transitional, :status_blocking, :status_terminal
+        explanation.respond_to?(:term) ? explanation.term : nil
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/context/analysis_context.rb
+================================================
+module Engine
+  module Context
+    class AnalysisContext
+      attr_reader :session_id,
+                  :subject,
+                  :file_state,
+                  :current_focus,
+                  :reasoning_budget,
+                  :lifecycle,
+                  :blocking_condition
+
+      attr_accessor :contextual_explanation
+
+      def initialize(
+        session_id:,
+        subject:,
+        file_state:,
+        current_focus:,
+        reasoning_budget:,
+        lifecycle:,
+        blocking_condition:
+      )
+        @session_id = session_id
+        @subject = subject
+        @file_state = file_state
+        @current_focus = current_focus
+        @reasoning_budget = reasoning_budget
+        @lifecycle = lifecycle
+        @blocking_condition = blocking_condition
+
+        # v0.10 contextual reuse
+        @contextual_explanation = nil
+      end
+
+      def to_h
+        {
+          session_id: @session_id,
+          subject: @subject,
+          file_state: @file_state,
+          current_focus: @current_focus,
+          reasoning_budget: @reasoning_budget,
+          lifecycle: @lifecycle,
+          blocking_condition: @blocking_condition
+        }
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/eligibility/knowledge_eligibility_checker.rb
+================================================
+# frozen_string_literal: true
+
+# Performs individual eligibility checks used by the eligibility gate.
+#
+# This class contains NO retrieval logic and NO AI interaction.
+# It only inspects intent, registry metadata, and governance rules.
+#
+# Phase: v0.6.1
+# Responsibility: Rule evaluation, not decision orchestration.
+
+require_relative '../knowledge/knowledge_registry'
+
+module Engine
+  module Eligibility
+    class KnowledgeEligibilityChecker
+      def initialize(knowledge_registry:)
+        @knowledge_registry = knowledge_registry
+      end
+
+      # Shared default checker instance (read-only, stateless usage)
+      def self.default
+        @default ||= new(
+          knowledge_registry: Engine::Knowledge::KnowledgeRegistry.default
+        )
+      end
+
+      # ------------------------------------------------------------
+      # NEW (v0.6.1): Return authoritative sources for a domain
+      # ------------------------------------------------------------
+      def sources_for_domain(domain)
+        @knowledge_registry.find_by_domain(domain)
+      end
+
+      # Determines whether the intent type is allowed to consult documentation.
+      def intent_eligible?(intent)
+        [:definition, :policy, :process].include?(intent)
+      end
+
+      # Determines whether authority level is sufficient.
+      def authority_sufficient?(sources, intent)
+        case intent
+        when :policy
+          sources.any? { |s| s.authority_level == Engine::Knowledge::KnowledgeAuthority::POLICY }
+        when :definition
+          sources.any? do |s|
+            [Engine::Knowledge::KnowledgeAuthority::POLICY, Engine::Knowledge::KnowledgeAuthority::REFERENCE]
+              .include?(s.authority_level)
+          end
+        else
+          false
+        end
+      end
+
+      # Determines whether documentation defines this category of answer.
+      def coverage_defined_for_intent?(intent)
+        [:definition, :policy, :process].include?(intent)
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/eligibility/knowledge_eligibility_gate.rb
+================================================
+# frozen_string_literal: true
+
+# Central gate that decides whether documentation
+# is allowed to be consulted for a given question.
+#
+# IMPORTANT:
+# - This gate DOES NOT perform retrieval.
+# - This gate DOES NOT change responses.
+# - This gate ONLY returns an explicit decision.
+#
+# Phase: v0.6.1
+# Responsibility: Permission gating.
+
+require_relative "knowledge_eligibility_checker"
+require_relative "knowledge_eligibility_result"
+require_relative "knowledge_eligibility_reason"
+
+
+module Engine
+  module Eligibility
+    class KnowledgeEligibilityGate
+      # ------------------------------------------------------------
+      # Entry point used by the console (Phase 7.0 execution fork)
+      # ------------------------------------------------------------
+      def self.evaluate(intent:, domain:)
+        checker = KnowledgeEligibilityChecker.default
+
+        normalized_intent = normalize_intent(intent)
+
+        unless checker.intent_eligible?(normalized_intent)
+          return KnowledgeEligibilityResult.new(
+            allowed: false,
+            reason: KnowledgeEligibilityReason::INTENT_NOT_ELIGIBLE
+          )
+        end
+        sources = checker.sources_for_domain(domain)
+
+        if sources.empty?
+          return KnowledgeEligibilityResult.new(
+            allowed: false,
+            reason: KnowledgeEligibilityReason::NO_KNOWLEDGE_SOURCE
+          )
+        end
+
+        unless checker.authority_sufficient?(sources, normalized_intent)
+          return KnowledgeEligibilityResult.new(
+            allowed: false,
+            reason: KnowledgeEligibilityReason::INSUFFICIENT_AUTHORITY
+          )
+        end
+
+        unless checker.coverage_defined_for_intent?(normalized_intent)
+          return KnowledgeEligibilityResult.new(
+            allowed: false,
+            reason: KnowledgeEligibilityReason::COVERAGE_NOT_DEFINED
+          )
+        end
+
+        KnowledgeEligibilityResult.new(
+          allowed: true,
+          reason: KnowledgeEligibilityReason::ALLOWED
+        )
+      end
+
+      # ------------------------------------------------------------
+      # Phase 5 → Phase 6 intent normalization
+      #
+      # Converts conversational intents into knowledge categories.
+      # This mapping is explicit and auditable by design.
+      # ------------------------------------------------------------
+      def self.normalize_intent(intent)
+        case intent
+        when :status_meaning
+          :definition
+        when :next_action
+          :process
+        when :error_meaning
+          :causality
+        else
+          intent
+        end
+      end
+
+      private_class_method :normalize_intent
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/eligibility/knowledge_eligibility_reason.rb
+================================================
+# frozen_string_literal: true
+
+# Enumerates explicit reasons why knowledge retrieval is allowed or denied.
+#
+# These reasons are NOT user-facing yet;
+# they exist for governance, logging, and future explanation.
+#
+# Phase: v0.6.1
+# Responsibility: Explainability of decisions.
+
+module Engine
+  module Eligibility
+    module KnowledgeEligibilityReason
+      ALLOWED = :allowed
+
+      INTENT_NOT_ELIGIBLE        = :intent_not_eligible
+      NO_KNOWLEDGE_SOURCE       = :no_knowledge_source
+      INSUFFICIENT_AUTHORITY    = :insufficient_authority
+      DOMAIN_MISMATCH           = :domain_mismatch
+      COVERAGE_NOT_DEFINED      = :coverage_not_defined
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/eligibility/knowledge_eligibility_result.rb
+================================================
+# frozen_string_literal: true
+
+# Represents the outcome of a knowledge eligibility decision.
+#
+# This object is intentionally explicit:
+# Every decision is either ALLOWED or DENIED,
+# with a concrete reason that can be audited.
+#
+# Phase: v0.6.1
+# Responsibility: Decision result only.
+
+module Engine
+  module Eligibility
+    class KnowledgeEligibilityResult
+      attr_reader :allowed, :reason
+
+      def initialize(allowed:, reason:)
+        @allowed = allowed
+        @reason  = reason
+      end
+
+      def allowed?
+        allowed == true
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/explanation/concept_classifier.rb
+================================================
+# frozen_string_literal: true
+
+# ConceptClassifier
+#
+# v0.9.0 — Guided Status & Error Workflows
+#
+# PURPOSE:
+# Classifies a canonical, grounded term into a semantic concept type.
+#
+# This class answers ONE question and ONE question only:
+#   "What kind of thing is this?"
+#
+# It deliberately does NOT:
+# - explain meaning
+# - infer causes
+# - inspect document content
+# - interpret user intent
+#
+# MILESTONE CONTEXT:
+# - Grounding (v0.7) already guarantees the term is valid
+# - Intent mediation (v0.8) already guarantees correctness of term selection
+# - Classification exists ONLY to choose an explanation strategy
+#
+# EXTENSION RULE:
+# When adding new concepts, update classification here —
+# never inside templates or explanation builder.
+module Engine
+  module Explanation
+    class ConceptClassifier  
+       # ----------------------------------------------------------
+       # v0.10 — Transitional (non‑blocking) lifecycle states
+       # These represent system progression, not outcomes.
+       # ----------------------------------------------------------
+       TRANSITIONAL_STATUSES = [
+         "NEW",
+         "READY",
+         "PROCESSING",
+         "PARSED"
+       ].freeze
+
+      def classify(term)
+        case term
+        when /MAPPING ERROR/
+          {
+            concept_type: :error_mapping,
+            blocking: true,
+            ownership: "Accounting / Operations"
+          }
+
+        when "PARTIAL RECONCILED"
+          {
+            concept_type: :status_blocking,
+            blocking: true,
+            ownership: "Accounting"
+          }
+
+        when "FULL RECONCILED", "RECONCILED"
+          {
+            concept_type: :status_terminal,
+            blocking: false,
+            ownership: "System"
+          }
+        # --------------------------------------------------------
+        # v0.10 — Transitional lifecycle states
+        # --------------------------------------------------------
+        when *TRANSITIONAL_STATUSES
+          {
+            concept_type: :status_transitional,
+            blocking: false,
+            ownership: "System"
+          }
+
+        else
+          # Unknown or unsupported concept for v0.9
+          # Caller must handle nil safely
+          nil
+        end
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/explanation/explanation_builder.rb
+================================================
+require_relative 'concept_classifier'
+
+# v0.7 — Grounded error explanations
+require_relative '../templates/mapping_error_template'
+
+# v0.9 — System state explanations (blocking + transitional)
+require_relative "../templates/status_template"
+require_relative "../templates/transitional_status_template"
+
+# v0.9 — Terminal lifecycle states
+require_relative "../templates/terminal_status_template"
+
+# ============================================================
+# ExplanationBuilder
+#
+# Role:
+# - Produces authoritative explanations for known system concepts
+# - Must NEVER hallucinate or infer unknown concepts
+#
+# Evolution:
+# - v0.7  : mapping & parsing errors
+# - v0.9  : blocking + terminal lifecycle states
+# - v0.10 : transitional lifecycle states (NEW, READY, PARSED, etc.)
+#
+# Design Rule:
+# - If explain(term) returns nil → caller may attempt grounding
+# - If explain(term) returns a contract → it is authoritative
+# ============================================================
+module Engine
+  module Explanation
+    class ExplanationBuilder
+      def initialize
+        @classifier = ConceptClassifier.new
+      end
+
+      # ------------------------------------------------------------
+      # explain(term)
+      #
+      # Entry point for system‑level explanations.
+      # Returns an ExplanationContract or nil.
+      #
+      # IMPORTANT:
+      # - This method must stay deterministic
+      # - It must not reason beyond explicit classifications
+      # ------------------------------------------------------------
+      def explain(term)
+        classification = @classifier.classify(term)
+        return nil unless classification
+
+        case classification[:concept_type]
+
+        # ----------------------------------------------------------
+        # v0.7 — Mapping / parsing error explanations
+        # ----------------------------------------------------------
+        when :error_mapping
+          Engine::Templates::MappingErrorTemplate.new.build(term, classification)
+
+        # ----------------------------------------------------------
+        # v0.9 — Blocking lifecycle states
+        # Example: PARTIAL RECONCILED
+        # ----------------------------------------------------------
+        when :status_blocking
+          Engine::Templates::StatusTemplate.new.build(term, classification)
+
+        # ----------------------------------------------------------
+        # v0.9 — Terminal lifecycle states
+        # Example: FULL RECONCILED
+        # ----------------------------------------------------------
+        when :status_terminal
+          Engine::Templates::TerminalStatusTemplate.new.build(term, classification)
+
+        # ----------------------------------------------------------
+        # v0.10 — Transitional lifecycle states
+        # Example: NEW, READY, PROCESSING, PARSED
+        #
+        # These are informational states:
+        # - Not blocking
+        # - Not actionable
+        # - Analyst‑focused visibility only
+        # ----------------------------------------------------------
+        when :status_transitional
+          Engine::Templates::TransitionalStatusTemplate.new.build(term, classification)
+
+        else
+          # Concept supported by grounding but not yet modeled
+          # in ExplanationBuilder for this milestone
+          nil
+        end
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/explanation/explanation_contract.rb
+================================================
+# frozen_string_literal: true
+
+# ExplanationContract
+#
+# v0.9.0 — Guided Status & Error Workflows
+#
+# PURPOSE:
+# Defines the formal structure of a guided explanation.
+# This contract ensures that all explanations are:
+#   - complete
+#   - consistent
+#   - auditable
+#   - safe (no hallucinated guidance)
+#
+# IMPORTANT DESIGN PRINCIPLES:
+# - This struct defines SHAPE only, not behavior.
+# - No logic, no inference, no defaults.
+# - Every explanation produced in v0.9 MUST conform to this contract.
+#
+# MILESTONE CONTEXT:
+# - v0.7.x determines WHAT is true (grounding)
+# - v0.8.0 determines WHAT the user means (intent mediation)
+# - v0.9.0 determines HOW the grounded truth is explained to humans
+#
+# FUTURE NOTE:
+# Later milestones (v1.x+, v2.x) may consume this struct
+# for UI, automation, or evaluation — do NOT change lightly.
+module Engine
+  module Explanation
+    ExplanationContract = Struct.new(
+      :concept_type,        # Symbol — e.g. :status, :status_blocking, :error_mapping
+      :blocking,            # true | false | :temporary
+      :ownership,           # String — who is responsible (Accounting, Ops, Support)
+      :meaning,             # String — document-safe interpretation
+      :impact,              # String — what cannot proceed because of this
+      :typical_next_step,   # Optional String — generic, non-procedural guidance
+      :notes,               # Optional String — caveats or clarifications
+      keyword_init: true
+    ) do
+
+      # Converts the ExplanationContract into a structured hash
+      # suitable for JSON serialization.
+      #
+      # IMPORTANT:
+      # - This controls presentation, not logic.
+      # - Do not embed business rules here.
+      def to_h
+        {
+          concept_type: concept_type,
+          blocking: blocking,
+          ownership: ownership,
+          meaning: meaning,
+          impact: impact,
+          typical_next_step: typical_next_step,
+          notes: notes
+        }.compact
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/follow_up/boundary_responder.rb
+================================================
+
+# frozen_string_literal: true
+
+# BoundaryResponder
+#
+# v0.10.0 — Contextual Reuse
+#
+# PURPOSE:
+# Provides a short, neutral message when a question
+# is outside the analyzer's responsibility.
+module Engine
+  module FollowUp
+    class BoundaryResponder
+      def respond
+        "I can explain system states and meanings, but I can’t provide operational or UI guidance."
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/follow_up/context_store.rb
+================================================
+# frozen_string_literal: true
+
+# ContextStore
+#
+# v0.10.0 — Contextual Reuse
+#
+# PURPOSE:
+# Stores the most recent ExplanationContract for safe contextual reuse.
+#
+# DESIGN CONSTRAINTS:
+# - Stores exactly one explanation
+# - Read-only access
+# - No mutation, inference, or enrichment
+# - Cleared on session reset or overwrite
+module Engine
+  module FollowUp
+    class ContextStore
+      def initialize
+        @last_explanation = nil
+      end
+
+      def store(explanation_contract)
+        return unless explanation_contract
+
+        @last_explanation = explanation_contract
+      end
+
+      def fetch
+        @last_explanation
+      end
+
+      def clear
+        @last_explanation = nil
+      end
+
+      def empty?
+        @last_explanation.nil?
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/follow_up/follow_up_classifier.rb
+================================================
+# frozen_string_literal: true
+
+# FollowUpClassifier
+#
+# v0.10.0 — Contextual Reuse
+#
+# PURPOSE:
+# Classifies follow-up questions that can be answered
+# by projecting fields from a prior ExplanationContract.
+#
+# DOES NOT:
+# - Resolve new intent
+# - Access documents
+# - Infer meaning
+module Engine
+  module FollowUp
+    class FollowUpClassifier
+      BLOCKING_PATTERNS = [
+        "block", "blocking", "stop reconciliation"
+      ]
+
+      OWNERSHIP_PATTERNS = [
+        "who owns", "owner", "responsible", "ownership"
+      ]
+
+      COMPLETION_PATTERNS = [
+        "complete", "completed", "finished", "final", "terminal"
+      ]
+
+      IMPACT_PATTERNS = [
+        "impact", "affect", "what happens"
+      ]
+
+      OUT_OF_SCOPE_PATTERNS = [
+        "fix", "resolve", "how do i", "where do i", "click",
+        "enable", "upload", "retry", "why did"
+      ]
+
+      LIFECYCLE_NEXT_PATTERNS = [
+        "what stage comes after", "what comes next", "what happens after"
+      ]
+
+      def classify(input)
+        normalized = normalize(input)
+
+        return :out_of_scope if matches?(normalized, OUT_OF_SCOPE_PATTERNS)
+        return :blocking_query if matches?(normalized, BLOCKING_PATTERNS)
+        return :ownership_query if matches?(normalized, OWNERSHIP_PATTERNS)
+        return :completion_query if matches?(normalized, COMPLETION_PATTERNS)
+        return :impact_query if matches?(normalized, IMPACT_PATTERNS)
+        return :lifecycle_next if matches?(normalized, LIFECYCLE_NEXT_PATTERNS)
+
+        :unknown
+      end
+
+      private
+
+      def normalize(text)
+        text.to_s.downcase.strip
+      end
+
+      def matches?(text, patterns)
+        patterns.any? { |pattern| text.include?(pattern) }
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/follow_up/projection_resolver.rb
+================================================
+# frozen_string_literal: true
+
+# ProjectionResolver
+#
+# v0.10.0 — Contextual Reuse
+#
+# PURPOSE:
+# Resolves contextual follow-up questions by projecting
+# fields from a stored ExplanationContract.
+#
+# GUARANTEE:
+# - No new meaning is introduced
+# - No inference or synthesis
+# - No operational guidance
+module Engine
+  module FollowUp
+    class ProjectionResolver
+      def resolve(classification, explanation)
+        case classification
+        when :blocking_query
+          resolve_blocking(explanation)
+
+        when :ownership_query
+          resolve_ownership(explanation)
+
+        when :completion_query
+          resolve_completion(explanation)
+
+        when :impact_query
+          explanation.impact
+
+        else
+          nil
+        end
+      end
+
+      private
+
+      def resolve_blocking(explanation)
+        if explanation.blocking
+          "Yes. This blocks reconciliation."
+        else
+          "No. This does not block reconciliation."
+        end
+      end
+
+      def resolve_ownership(explanation)
+        "This is owned by #{explanation.ownership}."
+      end
+
+      def resolve_completion(explanation)
+        if explanation.concept_type == :status_terminal
+          "Yes. This is a terminal state and reconciliation is complete."
+        else
+          "No. Reconciliation is not complete."
+        end
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/grounding/document_adapter.rb
+================================================
+# frozen_string_literal: true
+
+# DocumentAdapter
+#
+# Defines the execution contract for accessing authoritative documentation.
+#
+# This class represents an abstract execution boundary.
+# It does NOT perform retrieval, parsing, or validation.
+#
+# Phase: v0.7.0
+# Responsibility: Define the execution interface only
+module Engine
+  module Grounding
+    class DocumentAdapter
+      # Attempts to fetch an approved section from a document.
+      #
+      # @param source_pointer [String] Stable reference to the document source
+      # @param section [Symbol] Logical section identifier (e.g. :definitions)
+      # @param version [String] Document version identifier
+      #
+      # @return [String, nil]
+      #   String → authoritative content found (future milestones)
+      #   nil    → content not available (valid outcome)
+      def fetch_section(source_pointer:, section:, version:, term:)
+        raise NotImplementedError, "Subclasses must implement fetch_section"
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/grounding/grounded_explanation_controller.rb
+================================================
+# frozen_string_literal: true
+
+# Coordinates grounded explanation execution.
+#
+# Phase 2:
+#  - Decides if system may answer
+#
+# Phase 3:
+#  - Decides if knowledge may be consulted (v0.6.1)
+#  - Executes document access (v0.7.0)
+#
+module Engine
+  module Grounding
+    class GroundedExplanationController
+      def initialize(document_adapter:, ai:)
+        @document_adapter = document_adapter
+        @ai = ai
+      end
+
+      # v0.7.3:
+      # ----------
+      # term must be provided explicitly.
+      #
+      def explain(context:, eligibility:, source:, section:, version:, term:, system_prompt:, user_prompt:)
+        definition =
+          @document_adapter.fetch_section(
+            source_pointer: source,
+            section: section,
+            version: version,
+            term: term
+          )
+
+        unless definition
+          return {
+            status: "NOT_DEFINED",
+            message: "This information is not defined in the authoritative documentation."
+          }
+        end
+
+        constrained_prompt = <<~PROMPT
+          AUTHORITATIVE DEFINITION
+          (Source: #{source} #{version}, Section: #{section.to_s.upcase})
+
+          #{term}
+          #{definition}
+
+          INSTRUCTION:
+          Answer using ONLY the definition above.
+          Do not add interpretations, actions, or external knowledge.
+        PROMPT
+
+        @ai.explain(
+          system_prompt: system_prompt + "\n" + constrained_prompt,
+          user_prompt: user_prompt
+        )
+      end
+
+      private
+
+      def explain_without_docs(system_prompt, user_prompt)
+        @ai.explain(
+          system_prompt: system_prompt,
+          user_prompt: user_prompt
+        )
+      end
+
+      def not_defined_response
+        {
+          status: "NOT_DEFINED",
+          message: "This information is not defined in the authoritative documentation."
+        }
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/grounding/pdf_document_adapter.rb
+================================================
+# frozen_string_literal: true
+
+require_relative "document_adapter"
+
+# PdfDocumentAdapter
+#
+# Concrete execution adapter for PDF-based documentation.
+#
+# v0.7.0 responsibility:
+# - Exist as a concrete adapter implementation
+# - Be invoked when knowledge usage is permitted
+# - Return a deterministic execution result
+#
+# IMPORTANT:
+# - This version DOES NOT read files
+# - This version DOES NOT parse PDFs
+# - Returning nil is a valid and expected outcome
+#
+# Later milestones will extend this adapter incrementally:
+# - v0.7.1: Source pointer resolution (file existence)
+# - v0.7.2: Section identification (definitions, policies)
+# - v0.7.3: Term-level grounded extraction
+#
+# Phase: v0.7.0
+# Responsibility: Execution plumbing only
+module Engine
+  module Grounding
+    class PdfDocumentAdapter < DocumentAdapter
+      # Explicitly declared section headers.
+      # These represent the authoritative structure authored by humans.
+
+      # ============================================================
+       # v0.7.2 — SECTION IDENTIFICATION
+       # ============================================================
+       # Explicitly declared section headers.
+       # These represent the authoritative structure authored by humans.
+       #
+       # NOTE:
+       # - This is where v0.7.2 officially begins
+       # - Structure is introduced BEFORE semantics
+      SECTION_HEADERS = {
+        definitions: /^(definitions|definition)\b/i,
+        status_codes: /^(status codes?)\b/i,
+        policies: /^(policy|policies|rules)\b/i
+      }.freeze
+
+
+      # Attempts to fetch an approved document section.
+      #
+      # @param source_pointer [String] Stable reference to the document
+      # @param section [Symbol] Logical section (e.g. :definitions)
+      # @param version [String] Document version identifier
+      #
+      # @return [String, nil]
+      #   nil indicates that no authoritative content is available
+
+
+      # Main execution entrypoint.
+      #
+      # Returns:
+      #   - Full raw section text if the section can be identified
+      #   - nil if the document exists but the section cannot be found
+      def fetch_section(source_pointer:, section:, version:, term:)
+        document_path = resolve_source_pointer(source_pointer, version)
+        return nil unless File.exist?(document_path)
+
+        # ------------------------------------------------------------
+        # v0.7.2 — PDF → TEXT CONVERSION
+        # ------------------------------------------------------------
+        text = extract_text(document_path)
+        return nil unless text
+
+        # v0.7.2 — SECTION BOUNDARY EXTRACTION
+        section_text = extract_section(text, section)
+        return nil unless section_text
+
+        # v0.7.3: Extract individual term definition
+        extract_term_definition(section_text, term)
+      end
+
+      private
+      # Resolves a stable document identifier into a concrete file path.
+      #
+      # NOTE:
+      # - Resolution logic is deterministic
+      # - No file parsing occurs here
+      def resolve_source_pointer(source_pointer, version)
+        File.join(File::SEPARATOR, "docs", "#{source_pointer}-#{version}.pdf")
+      end
+
+    # Converts a PDF document into plain text deterministically.
+      #
+      # Uses an external tool (pdftotext) and returns the raw text output.
+      # No interpretation or cleanup is applied.
+      # v0.7.2 — PDF → TEXT
+      def extract_text(document_path)
+        output = `pdftotext "#{document_path}" -`
+        output.strip.empty? ? nil : output
+      rescue
+        nil
+      end
+
+      # Extracts a full document section based on a declared header.
+      #
+      # Strategy:
+      #   1. Split document text into blocks (paragraphs)
+      #   2. Locate the block whose first line matches the section header
+      #   3. Collect that block and all following blocks
+      #   4. Stop when another known section header is encountered
+      #   v0.7.2 — SECTION BOUNDARY EXTRACTION
+      def extract_section(text, section)
+        header_pattern = SECTION_HEADERS[section]
+        return nil unless header_pattern
+
+        blocks = text.split(/\n{2,}/)
+
+        start_index = blocks.find_index do |block|
+          first_line = block.lines.first&.strip
+          first_line&.match?(header_pattern)
+        end
+
+        return nil if start_index.nil?
+
+        collected = []
+
+        blocks[start_index..].each do |block|
+          first_line = block.lines.first&.strip
+
+          if collected.any? &&
+             SECTION_HEADERS.values.any? { |p| first_line&.match?(p) }
+            break
+          end
+
+          collected << block
+        end
+
+        collected.join("\n\n")
+      end
+
+      # Extracts a single authoritative definition for a term
+      # from within a previously extracted section.
+      #
+      # Strategy:
+      #   - Identify the term name as an uppercase header
+      #   - Collect all subsequent lines until another term header appears
+      #
+
+      # ============================================================
+      # v0.7.3 — TERM-LEVEL GROUNDED EXTRACTION
+      # ============================================================
+      def extract_term_definition(section_text, term)
+        lines = section_text.lines.map(&:rstrip)
+
+        normalized_term = Regexp.escape(term.strip)
+        header_regex = /^#{normalized_term}\b/i
+
+        start_index = lines.find_index do |line|
+          line.strip.match?(header_regex)
+        end
+
+        return nil if start_index.nil?
+
+        collected = []
+
+        lines[(start_index + 1)..].each do |line|
+          # Stop when we hit another term header (uppercase structural boundary)
+          break if line.strip.match?(/^[A-Z\s]{3,}$/)
+
+          collected << line
+        end
+
+        definition = collected.join("\n").strip
+        definition.empty? ? nil : definition
+      end
+    end
+  end
+end
+
+
+
+
+================================================
+FILE: lib/engine/intent/alias_map.rb
+================================================
+ # frozen_string_literal: true
+
+# Explicit alias → canonical term mappings.
+# This map is intentionally conservative.
+#
+# If a phrase is not listed here, it MUST NOT be resolved.
+# Ambiguity always results in NOT_DEFINED.
+module Engine
+  module Intent
+    ALIAS_MAP = {
+      # ------------------------
+      # PARSED / PARSING
+      # ------------------------
+      "parsing" => "PARSED",
+      "parse" => "PARSED",
+      "parsed" => "PARSED",
+      "file parsed" => "PARSED",
+      "file parsing completed" => "PARSED",
+
+      # ------------------------
+      # NEW / READY / PROCESSING
+      # ------------------------
+      "new" => "NEW",
+      "file uploaded" => "NEW",
+
+      "ready" => "READY",
+      "ready for parsing" => "READY",
+
+      "processing" => "PROCESSING",
+      "file processing" => "PROCESSING",
+      "processing file" => "PROCESSING",
+
+      # ------------------------
+      # PARTIAL / FULL RECONCILIATION
+      # ------------------------
+      "partial reconciliation" => "PARTIAL RECONCILED",
+      "partially reconciled" => "PARTIAL RECONCILED",
+      "partial reconciled" => "PARTIAL RECONCILED",
+      "file partially reconciled" => "PARTIAL RECONCILED",
+
+      "fully reconciled" => "FULL RECONCILED",
+      "full reconciliation" => "FULL RECONCILED",
+      "full reconciled" => "FULL RECONCILED",
+
+      "reconciled" => "RECONCILED",
+      "file reconciled" => "RECONCILED",
+
+      # ------------------------
+      # TRANSACTION RECONCILING
+      # ------------------------
+      "tran reconciling" => "TRAN RECONCILING",
+      "transaction reconciling" => "TRAN RECONCILING",
+      "ready for transaction reconciliation" => "TRAN RECONCILING",
+
+      "processing tran reconciling" => "PROCESSING TRAN RECONCILING",
+      "transaction reconciliation in progress" => "PROCESSING TRAN RECONCILING",
+
+      # ------------------------
+      # RECONCILING
+      # ------------------------
+      "reconciling" => "RECONCILING",
+      "ready for reconciliation" => "RECONCILING",
+
+      "processing reconciling" => "PROCESSING RECONCILING",
+      "reconciliation in progress" => "PROCESSING RECONCILING",
+
+      # ------------------------
+      # MAPPING ERRORS
+      # ------------------------
+      "mapping error payment id not found" => "MAPPING ERROR - Payment ID Not Found",
+      "mapping error payment id" => "MAPPING ERROR - Payment ID Not Found",
+      "payment id not found" => "MAPPING ERROR - Payment ID Not Found",
+
+      "mapping error data format issue" => "MAPPING ERROR - Data Format Issue",
+      "mapping error format" => "MAPPING ERROR - Data Format Issue",
+      "data format issue" => "MAPPING ERROR - Data Format Issue",
+
+      # ------------------------
+      # PARSING & RECONCILING ERRORS
+      # ------------------------
+      "parsing error" => "PARSING ERROR - Contact Support",
+      "parsing error contact support" => "PARSING ERROR - Contact Support",
+
+      "reconciling error" => "RECONCILING ERROR - Contact Support",
+      "reconciliation error" => "RECONCILING ERROR - Contact Support",
+      "reconciling error contact support" => "RECONCILING ERROR - Contact Support"
+    }.freeze
+  end
+end
+
+
+================================================
+FILE: lib/engine/intent/canonicalizer.rb
+================================================
+# frozen_string_literal: true
+
+require_relative "alias_map"
+
+# Canonicalizer
+#
+# Responsible only for mapping informal phrases
+# to canonical document vocabulary.
+module Engine
+  module Intent
+    class Canonicalizer
+      def self.resolve_term(raw_term)
+        return nil unless raw_term.is_a?(String)
+
+        normalized = raw_term
+          .strip
+          .downcase
+          .tr("–—-", " ")           # normalize all dashes to spaces
+          .gsub(/[^\w\s]/, "")       # remove remaining punctuation
+          .gsub(/\s+/, " ")          # collapse whitespace
+          .strip
+
+        ALIAS_MAP[normalized]
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/intent/intent_contract.rb
+================================================
+# frozen_string_literal: true
+
+# Canonical Intent Contract
+#
+# This struct represents a fully-resolved, execution-safe
+# request that can be passed to the grounding layer.
+#
+# No defaults. No inference. All fields are explicit.
+module Engine
+  module Intent
+    Intent = Struct.new(
+      :category,   # :definition (only supported category in v0.8)
+      :source,     # e.g. "RECONCILIATION_HANDBOOK"
+      :version,    # e.g. "v2.1"
+      :section,    # e.g. :definitions
+      :term,       # Canonical document term (e.g. "PARSED")
+      :confidence, # :high (reserved for future UX)
+      keyword_init: true
+    )
+  end
+end
+
+
+================================================
+FILE: lib/engine/intent/intent_resolver.rb
+================================================
+# frozen_string_literal: true
+
+require_relative "intent_contract"
+require_relative "canonicalizer"
+
+# IntentResolver
+#
+# Parses user input and emits a canonical Intent object.
+# If intent cannot be resolved safely, returns nil.
+module Engine
+  module Intent
+    class IntentResolver
+      DEFINITION_PATTERN = /\Awhat does (.+?) mean\??\z/i
+
+      def resolve(user_input)
+        return nil unless user_input.is_a?(String)
+
+        match = user_input.strip.match(DEFINITION_PATTERN)
+        return nil unless match
+
+        raw_term = match[1]
+        canonical_term = Canonicalizer.resolve_term(raw_term)
+        return nil unless canonical_term
+
+        Intent.new(
+          category: :definition,
+          source: "RECONCILIATION_HANDBOOK",
+          version: "v2.1",
+          section: :definitions,
+          term: canonical_term,
+          confidence: :high
+        )
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/knowledge/knowledge_authority.rb
+================================================
+# frozen_string_literal: true
+
+# Defines how authoritative a knowledge source is.
+#
+# This is a governance construct, not business logic.
+# It allows later phases (v0.6.1 / v0.7.0) to enforce
+# stricter rules for POLICY documents vs REFERENCE or GUIDANCE.
+#
+# Phase: v0.6.0 (Knowledge Source Registration)
+# Responsibility: Trust semantics ONLY.
+
+module Engine
+  module Knowledge
+    module KnowledgeAuthority
+      POLICY    = :policy     # Defines mandatory rules / regulations
+      REFERENCE = :reference  # Defines meanings, terminology
+      GUIDANCE  = :guidance   # Best practices, non-binding
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/knowledge/knowledge_domain.rb
+================================================
+# frozen_string_literal: true
+
+# Defines the domain scope in which a knowledge source applies.
+#
+# Domain scoping is a critical safety boundary:
+# it prevents cross-domain misuse of documentation
+# (e.g., using reconciliation policy to explain settlement logic).
+#
+# Phase: v0.6.0
+# Responsibility: Applicability enforcement.
+
+module Engine
+  module Knowledge
+    module KnowledgeDomain
+      RECONCILIATION = :reconciliation
+      SETTLEMENT     = :settlement
+      ACCOUNTING     = :accounting
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/knowledge/knowledge_registry.rb
+================================================
+# frozen_string_literal: true
+
+require_relative "knowledge_version"
+require_relative "knowledge_source"
+require_relative "knowledge_authority"
+
+# Central registry for all knowledge sources known to the system.
+#
+# This registry is:
+# - Read-only during runtime
+# - Global (not session-scoped)
+# - Passive (no retrieval, no reasoning)
+#
+# It is the single source of truth for:
+# - What documentation exists
+# - What authority it has
+# - Which domain it applies to
+#
+# Phase: v0.6.0
+# Responsibility: Governance and inspection ONLY.
+#
+# Extended in v0.6.1+ to expose a shared default instance.
+
+module Engine
+  module Knowledge
+    class KnowledgeRegistry
+      # ------------------------------------------------------------
+      # Phase 3 — Shared registry accessor
+      # ------------------------------------------------------------
+      def self.default
+        @default ||= new.tap(&:register_defaults)
+      end
+
+      def initialize
+        @sources = {}
+      end
+
+      # Registers well-known authoritative knowledge sources.
+      # Called only during registry initialization.
+      def register_defaults
+        register(
+          KnowledgeSource.new(
+            id: "RECONCILIATION_HANDBOOK",
+            name: "Payment Reconciliation Handbook",
+            description: "Defines reconciliation statuses, meanings, and rules for payment files.",
+            authority_level: Engine::Knowledge::KnowledgeAuthority::POLICY,
+            domain_scope: [:reconciliation],
+            version: Engine::Knowledge::KnowledgeVersion.new(
+              version_id: "v2.1",
+              effective_from: Time.utc(2025, 1, 1),
+              status: :active
+            ),
+            source_pointer: "docs/RECONCILIATION_HANDBOOK-v2.1.pdf"
+          )
+        )
+      end
+
+      # Registers a new knowledge source.
+      #
+      # Typically called during system initialization.
+      # Not expected to be called during request handling.
+      def register(source)
+        @sources[source.id] = source
+      end
+
+      # Returns all registered knowledge sources.
+      def all_sources
+        @sources.values
+      end
+
+      # Finds all ACTIVE sources applicable to a given domain.
+      def find_by_domain(domain)
+        @sources.values.select do |source|
+          source.active? && source.domain_scope.include?(domain)
+        end
+      end
+
+      # Lookup by id (used later for execution and grounding).
+      def find_by_id(id)
+        @sources[id]
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/knowledge/knowledge_source.rb
+================================================
+# frozen_string_literal: true
+
+# Represents a registered, authoritative knowledge source.
+#
+# IMPORTANT:
+# - This class intentionally does NOT contain document content.
+# - It does NOT know how to fetch documents.
+# - It is pure metadata and governance.
+#
+# Think of this as a catalog entry, not a document.
+#
+# Phase: v0.6.0
+# Responsibility: Declare what knowledge exists and how it may be used later.
+
+module Engine
+  module Knowledge
+    class KnowledgeSource
+      attr_reader :id,
+                  :name,
+                  :description,
+                  :authority_level,
+                  :domain_scope,
+                  :version,
+                  :usage_constraints,
+                  :source_pointer
+
+      def initialize(
+        id:,
+        name:,
+        description:,
+        authority_level:,
+        domain_scope:,
+        version:,
+        source_pointer:,
+        usage_constraints: { read_only: true, explanation_only: true }
+      )
+        @id                = id
+        @name              = name
+        @description       = description
+        @authority_level   = authority_level
+        @domain_scope      = domain_scope
+        @version           = version
+        @source_pointer    = source_pointer
+        @usage_constraints = usage_constraints
+      end
+
+      # Indicates whether this source is currently usable.
+      # Actual eligibility decisions are made in later milestones.
+      def active?
+        version.active?
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/knowledge/knowledge_version.rb
+================================================
+# frozen_string_literal: true
+
+# Represents versioning metadata for a knowledge source.
+#
+# This class does NOT compare versions or select the latest.
+# It only declares which versions exist and which are active.
+#
+# Version awareness is essential for auditability and
+# future explanations such as "this rule changed in version X".
+#
+# Phase: v0.6.0
+# Responsibility: Temporal governance ONLY.
+module Engine
+  module Knowledge
+    class KnowledgeVersion
+      attr_reader :version_id, :effective_from, :effective_to, :status
+
+      def initialize(version_id:, effective_from:, effective_to: nil, status: :active)
+        @version_id     = version_id
+        @effective_from = effective_from
+        @effective_to   = effective_to
+        @status         = status # :active or :deprecated
+      end
+
+      def active?
+        status == :active
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/lifecycle/lifecycle_resolver.rb
+================================================
+# frozen_string_literal: true
+
+require_relative "reconciliation_life_cycle_map"
+
+# ============================================================
+# LifecycleResolver
+#
+# Introduced in: v0.10
+#
+# PURPOSE:
+# - Answer lifecycle sequencing questions using a read-only map
+#
+# THIS CLASS ANSWERS:
+# - "What stage comes after X?"
+# - "Is this the final stage?"
+#
+# THIS CLASS DOES NOT:
+# - Explain meaning of a status
+# - Provide operational steps
+# - Modify lifecycle state
+#
+# DESIGN PRINCIPLE:
+# - Delegates all lifecycle knowledge to ReconciliationLifecycleMap
+# - Returns analyst-safe, descriptive responses only
+# ============================================================
+module Engine
+  module Lifecycle
+    class LifecycleResolver
+      def resolve_next_stage(state)
+        # current = explanation_term(explanation)
+        next_stage = ReconciliationLifecycleMap.next_stage(state)
+
+        return nil unless next_stage
+
+        "After #{state}, the file proceeds to #{next_stage}."
+      end
+
+      def resolve_terminal(explanation)
+        current = explanation_term(explanation)
+
+        if ReconciliationLifecycleMap.terminal?(current)
+          "This is a terminal lifecycle state."
+        else
+          "This is not a terminal lifecycle state."
+        end
+      end
+
+      private
+
+      # ----------------------------------------------------------
+      # Extracts the canonical term from ExplanationContract
+      # ----------------------------------------------------------
+      def explanation_term(explanation)
+        explanation.respond_to?(:term) ? explanation.term : nil
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/lifecycle/reconciliation_life_cycle_map.rb
+================================================
+# ============================================================
+# ReconciliationLifecycleMap
+#
+# Introduced as reference in: v0.10
+#
+# Purpose:
+# - Provide an explicit, auditable lifecycle flow
+# - Enable future reasoning (v1.x) without inference
+#
+# IMPORTANT:
+# - This class is READ‑ONLY
+# - No business logic should mutate lifecycle order
+# ============================================================
+module Engine
+  module Lifecycle
+    class ReconciliationLifecycleMap
+      FLOW = [
+        "NEW",
+        "READY",
+        "PROCESSING",
+        "PARSED",
+        "TRAN RECONCILING",
+        "RECONCILING",
+        "PARTIAL RECONCILED",
+        "FULL RECONCILED"
+      ].freeze
+
+      def self.next_stage(current)
+        index = FLOW.index(current)
+        return nil unless index
+        FLOW[index + 1]
+      end
+
+      def self.terminal?(status)
+        status == "FULL RECONCILED"
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/reliability/ai_call_boundary.rb
+================================================
+# frozen_string_literal: true
+
+require "json"
+require "net/http"
+require "uri"
+
+
+module Engine
+  module Reliability
+    class AiCallBoundary
+      OPENAI_ENDPOINT = "https://api.openai.com/v1/chat/completions"
+
+      def initialize(api_key:, model:)
+        @api_key = api_key
+        @model = model
+      end
+
+      # Pure I/O boundary:
+      # - No retries
+      # - No fallbacks
+      # - May raise normalized technical errors
+      def explain(system_prompt:, user_prompt:)  	
+      	case user_prompt
+      	when /SIMULATE_TIMEOUT/
+      	  raise Timeout::Error
+      	when /SIMULATE_INVALID_JSON/
+      	  raise "INVALID_JSON_OUTPUT"
+      	when /SIMULATE_RATE_LIMIT/
+      	  raise "OPENAI_ERROR_429"
+      	end
+
+        raw = perform_api_call(system_prompt, user_prompt, analysis_context: '')
+
+        normalize_response(raw)
+      end
+
+      private
+
+      def perform_api_call(system_prompt, user_prompt, analysis_context: nil)
+        uri = URI.parse(OPENAI_ENDPOINT)
+
+        http = Net::HTTP.new(uri.host, uri.port)
+        http.use_ssl = true
+
+        request = Net::HTTP::Post.new(uri)
+        request["Authorization"] = "Bearer #{@api_key}"
+        request["Content-Type"] = "application/json"
+
+        request.body = {
+          model: @model,
+          temperature: 0.0,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: system_prompt },
+            { role: "user", content: user_prompt }
+          ]
+        }.to_json
+
+        response = http.request(request)
+        raise Timeout::Error if response.code.to_i == 504
+        raise "OPENAI_ERROR_#{response.code}" unless response.is_a?(Net::HTTPSuccess)
+
+        JSON.parse(response.body)
+      end
+
+      def normalize_response(raw)
+        content = raw.dig("choices", 0, "message", "content")
+        raise "EMPTY_AI_RESPONSE" unless content
+        JSON.parse(content)
+      rescue JSON::ParserError
+        raise "INVALID_JSON_OUTPUT"
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/reliability/cost_guard.rb
+================================================
+module Engine
+  module Reliability
+
+    module CostGuard
+      MAX_CALLS = 3
+
+      def self.start!
+        @calls = 0
+      end
+
+      def self.record!
+        @calls += 1
+      end
+
+      def self.exceeded?
+        @calls > MAX_CALLS
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/reliability/failure_classification.rb
+================================================
+module Engine
+  module Reliability
+# failure_classification.rb
+
+    module FailureClassification
+      def self.classify(error)
+        case error.message
+        when /TIMEOUT/
+          :TRANSIENT
+        when /429/
+          :RATE_LIMIT
+        when /INVALID_JSON/
+          :INVALID_OUTPUT
+        else
+          :TERMINAL
+        end
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/reliability/latency_budget.rb
+================================================
+module Engine
+  module Reliability
+
+    module LatencyBudget
+      MAX_SECONDS = 8
+
+      def self.start!
+        @start = Time.now
+      end
+
+      def self.exceeded?
+        Time.now - @start >= MAX_SECONDS
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/reliability/retry_policy.rb
+================================================
+module Engine
+  module Reliability
+
+    module RetryPolicy
+      MAX_RETRIES = 2
+      RETRYABLE = [:TRANSIENT, :RATE_LIMIT].freeze
+
+      def self.retry?(failure, attempt)
+        RETRYABLE.include?(failure) && attempt < MAX_RETRIES
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/reliability/safety_fallback.rb
+================================================
+module Engine
+  module Reliability
+
+    module SafetyFallback
+      def self.build(reason)
+        {
+          status: "FAILURE",
+          reason: reason,
+          message: "Request terminated safely"
+        }
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/reliability/trust_contract.rb
+================================================
+module Engine
+  module Reliability
+
+    module TrustContract
+      def self.success(payload)
+        { status: "SUCCESS", result: payload }
+      end
+
+      def self.failure(payload)
+        { status: "ERROR", error: payload }
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/templates/mapping_error_template.rb
+================================================
+# frozen_string_literal: true
+
+# MappingErrorTemplate
+#
+# v0.9.0 — Guided Status & Error Workflows
+#
+# PURPOSE:
+# Provides a deterministic explanation strategy for mapping errors.
+#
+# Mapping errors represent DATA INTEGRITY FAILURES that:
+# - block reconciliation
+# - require human correction
+# - must never be auto-remediated
+#
+# DESIGN CONSTRAINTS:
+# - Explanations must be document-safe
+# - No speculative root cause analysis
+# - No UI or system instructions
+# - No automation logic
+#
+# MILESTONE CONTEXT:
+# Mapping errors could not be explained in v0.7 (grounding-only)
+# and v0.8 (intent-only). v0.9 introduces controlled explanation.
+
+require_relative '../explanation/explanation_contract'
+
+module Engine
+  module Templates
+    class MappingErrorTemplate
+      def build(term, classification)
+        Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: classification[:blocking],
+          ownership: classification[:ownership],
+          meaning: meaning_for(term),
+          impact: impact_for(term),
+          typical_next_step: typical_next_step_for(term),
+          notes: notes_for(term)
+        )
+      end
+
+      private
+
+      def meaning_for(term)
+        "The payment file contains payment identifiers that do not match any existing records in the system."
+      end
+
+      def impact_for(term)
+        "Because the payments cannot be matched to known records, the file cannot proceed to reconciliation."
+      end
+
+      def typical_next_step_for(term)
+        "The file is typically corrected to include valid payment identifiers and then re-uploaded for processing."
+      end
+
+      def notes_for(term)
+        "This error must be resolved before reconciliation can continue."
+      end
+    end
+  end
+end
+
+
+================================================
+FILE: lib/engine/templates/status_template.rb
+================================================
+# frozen_string_literal: true
+
+# StatusTemplate
+#
+# v0.9.0 — Guided Status & Error Workflows
+#
+# PURPOSE:
+# Provides guided explanations for non-error system statuses.
+#
+# Statuses represent VALID system states, not failures.
+# They may still be blocking or require follow-up, but:
+# - they are not errors
+# - they must not trigger remediation workflows
+#
+# MILESTONE CONTEXT:
+# - v0.7.x provides raw, authoritative status definitions
+# - v0.8.0 resolves user intent to a canonical term
+# - v0.9.0 adds structured explanations for selected statuses
+#
+# This template currently supports:
+# - PARTIAL_RECONCILED
+#
+# Extension rule:
+# - New statuses must be explicitly added
+# - Do NOT infer behavior from naming or text
+
+module Engine
+  module Templates
+    class StatusTemplate
+      def build(term, classification)
+        case term
+        when "PARTIAL RECONCILED"
+          build_partial_reconciled(classification)
+        else
+          # Unsupported status for v0.9
+          nil
+        end
+      end
+
+      private
+
+      def build_partial_reconciled(classification)
+       Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: classification[:blocking],
+          ownership: classification[:ownership],
+          meaning:
+            "The file has been partially reconciled, meaning some transactions have been reconciled while others remain unsettled.",
+          impact:
+            "Because not all tenancies are settled, the reconciliation process is not yet complete.",
+          typical_next_step:
+            "Outstanding tenancies are typically reviewed and settled to complete reconciliation.",
+          notes:
+            "Full reconciliation cannot be achieved until all pending tenancies are settled."
+        )
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/templates/terminal_status_template.rb
+================================================
+# frozen_string_literal: true
+
+# TerminalStatusTemplate
+#
+# v0.9.0 — Guided Status & Error Workflows
+#
+# PURPOSE:
+# Provides guided explanations for terminal system statuses.
+#
+# Terminal statuses represent COMPLETED lifecycle states.
+# They indicate that no further processing or user action is required.
+#
+# DESIGN CONSTRAINTS:
+# - Must not suggest next steps
+# - Must not trigger workflows
+# - Must not reopen reasoning chains
+#
+# MILESTONE CONTEXT:
+# - v0.7 grounding confirms the terminal status authoritatively
+# - v0.8 intent mediation resolves the user’s question
+# - v0.9 formats the terminal meaning safely for humans
+#
+# This template currently supports:
+# - FULL_RECONCILED
+module Engine
+  module Templates
+    class TerminalStatusTemplate
+      def build(term, classification)
+        case term
+        when "FULL RECONCILED"
+          build_full_reconciled(classification)
+        else
+          nil
+        end
+      end
+
+      private
+
+      def build_full_reconciled(classification)
+       Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: false,
+          ownership: classification[:ownership],
+          meaning:
+            "The payment file has been fully reconciled, and all associated transactions and tenancies have been successfully processed.",
+          impact:
+            "Reconciliation is complete and no further processing is required.",
+          notes:
+            "This is a terminal state. No additional action is needed."
+        )
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: lib/engine/templates/transitional_status_template.rb
+================================================
+# ============================================================
+# TransitionalStatusTemplate
+#
+# Introduced in: v0.10
+#
+# Purpose:
+# - Explain non‑blocking, non‑terminal lifecycle states
+# - Provide visibility, not guidance
+#
+# Design Constraints:
+# - Must NOT include operational steps
+# - Must NOT suggest UI actions
+# - Must remain faithful to handbook semantics
+# ============================================================
+module Engine
+  module Templates
+    class TransitionalStatusTemplate
+      def build(term, classification)
+        case term
+        when "NEW"
+          build_new(classification)
+        when "READY"
+          build_ready(classification)
+        when "PROCESSING"
+          build_processing(classification)
+        when "PARSED"
+          build_parsed(classification)
+        else
+          nil
+        end
+      end
+
+      private
+
+      # ------------------------------------------------------------
+      # NEW
+      # ------------------------------------------------------------
+      def build_new(classification)
+        Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: false,
+          ownership: classification[:ownership],
+          meaning:
+            "The payment file has been uploaded into the system but processing has not yet started.",
+          impact:
+            "No parsing or reconciliation activity has occurred at this stage.",
+          notes:
+            "This is the initial lifecycle state after upload."
+        )
+      end
+
+      # ------------------------------------------------------------
+      # READY
+      # ------------------------------------------------------------
+      def build_ready(classification)
+        Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: false,
+          ownership: classification[:ownership],
+          meaning:
+            "The payment file has passed initial validations and is ready to be processed.",
+          impact:
+            "The system is prepared to begin parsing the file.",
+          notes:
+            "The file has not yet been reconciled."
+        )
+      end
+
+      # ------------------------------------------------------------
+      # PROCESSING
+      # ------------------------------------------------------------
+      def build_processing(classification)
+        Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: false,
+          ownership: classification[:ownership],
+          meaning:
+            "The system is actively processing the payment file.",
+          impact:
+            "The file is undergoing backend parsing or reconciliation operations.",
+          notes:
+            "During processing, the lifecycle state may change automatically."
+        )
+      end
+
+      # ------------------------------------------------------------
+      # PARSED
+      # ------------------------------------------------------------
+      def build_parsed(classification)
+        Engine::Explanation::ExplanationContract.new(
+          concept_type: classification[:concept_type],
+          blocking: false,
+          ownership: classification[:ownership],
+          meaning:
+            "The payment file has been successfully parsed and validated.",
+          impact:
+            "The file is now eligible to proceed to reconciliation.",
+          notes:
+            "No reconciliation outcomes have been finalized at this stage."
+        )
+      end
+    end
+  end
+end
+
+
+
+================================================
+FILE: script/debug_analyzer.rb
+================================================
+require_relative "../lib/engine"
+
+session_id = "DEBUG_S1"
+
+puts "---- STEP 1: base explanation ----"
+res1 = Engine::Analyzer.analyze(
+  question: "What stage comes after PARSED?",
+  context: { session_id: session_id }
+)
+puts res1
+
+
+curl -X POST http://localhost:4567/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"session_id":"S1","question":"What does PARTIAL RECONCILED indicate in the lifecycle?"}'
+
+# ✅ STORE ONLY THE EXPLANATION CONTRACT
+# prior_explanation = res1[:result]
+
+# puts "\n---- STEP 2: follow-up (does NOT update context) ----"
+# res2 = Engine::Analyzer.analyze(
+#   question: "Does this stop reconciliation?",
+#   context: {
+#     session_id: session_id,
+#     prior_explanation: prior_explanation
+#   }
+# )
+# puts res2
+
+# puts "\n---- STEP 3: second follow-up (ownership) ----"
+# res3 = Engine::Analyzer.analyze(
+#   question: "Who is responsible for resolving this?",
+#   context: {
+#     session_id: session_id,
+#     prior_explanation: prior_explanation   # ✅ SAME object
+#   }
+# )
+# puts res3
+
+# puts "\n---- STEP 4: third follow-up (impact) ----"
+# res4 = Engine::Analyzer.analyze(
+#   question: "What happens if I do nothing?",
+#   context: {
+#     session_id: session_id,
+#     prior_explanation: prior_explanation   # ✅ SAME object
+#   }
+# )
+# puts res4
+
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"session_id":"S1","question":"What does PARTIAL RECONCILED mean?"}'
+
+# # {"result":{"status":"SUCCESS","result":{"concept_type":"status_blocking","blocking":true,"ownership":"Accounting","meaning":"The file has been partially reconciled, meaning some transactions have been reconciled while others remain unsettled.","impact":"Because not all tenancies are settled, the reconciliation process is not yet complete.","typical_next_step":"Outstanding tenancies are typically reviewed and settled to complete reconciliation.","notes":"Full reconciliation cannot be achieved until all pending tenancies are settled."}}}%                                                                                                    
+
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"session_id":"S1","question":"Does this stop reconciliation?"}'
+
+# # {"result":{"status":"SUCCESS","result":"Yes. This blocks reconciliation."}}%                                                                                                                                          
+
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"session_id":"S1","question":"Who is responsible for resolving this?"}'
+
+
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"session_id":"S1","question":"What happens if I do nothing?"}'
+# {"result":{"status":"SUCCESS","result":{"status":"NOT_DEFINED","message":"This question could not be answered from the reconciliation knowledge base."}}}%        
+
+
+# # script/debug_analyzer.rb
+# require_relative "../lib/engine"
+
+# puts Engine::Analyzer.analyze(
+#   question: "What does PARTIAL RECONCILED mean?"
+# )
+
+
+
+# Canonical Mapping Error
+# What does MAPPING ERROR – Payment ID Not Found mean?
+
+# Alias Robustness
+# What does mapping error payment id not found mean?
+# What does payment id not found mean?
+# Does this stop reconciliation?
+
+
+# File‑level statuses
+# What does NEW mean?
+# What does READY mean?
+# What does PROCESSING mean?
+# What does PARSED mean?
+# What does RECONCILING mean?
+# What does FULL RECONCILED mean?
+# What does PARTIAL RECONCILED mean?
+
+# Error statuses
+# What does MAPPING ERROR – Payment ID Not Found mean?
+# What does MAPPING ERROR – Data Format Issue mean?
+# What does PARSING ERROR – Please Contact Support mean?
+# What does RECONCILING ERROR – Please Contact Support mean?
+
+# CATEGORY 1 — Definition & Status Meaning (Ground Truth)
+# These MUST be stable across phases.
+# File‑level statuses
+# What does NEW mean?
+# What does READY mean?
+# What does PROCESSING mean?
+# What does PARSED mean?
+# What does RECONCILING mean?
+# What does FULL RECONCILED mean?
+# What does PARTIAL RECONCILED mean?
+
+# CATEGORY 2 — Impact & Consequence (v0.10 Projection)
+# Does this block reconciliation?
+# Is reconciliation complete in this state?
+# Can the file move forward from here?
+
+# What happens if this is not resolved?
+# What is the impact on reconciliation?
+# What remains pending?
+
+# CATEGORY 3 — Ownership & Responsibility
+# Who is responsible for resolving this?
+# Is this owned by the system or accounting?
+# Does support need to be involved?
+
+
+# CATEGORY 4 — Lifecycle Reasoning (Conceptual Flow)
+# What stage comes after PARSED?
+# What does PARTIAL RECONCILED indicate in the lifecycle?
+# Is FULL RECONCILED a terminal state?
+
+
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"question":"What does MAPPING ERROR – Payment ID Not Found mean?"}'
+
+# curl -X POST http://localhost:4567/analyze \
+#   -H "Content-Type: application/json" \
+#   -d '{"question":"What does MAPPING ERROR – Payment ID Not Found mean?"}'
+
+
+================================================
+FILE: sinatra/app.rb
+================================================
+# frozen_string_literal: true
+
+require "sinatra"
+require "json"
+require_relative "../lib/engine"
+
+set :bind, "0.0.0.0"
+set :port, ENV.fetch("PORT", 4567)
+
+SESSION_STORE = {} # in-memory, keyed by session_id
+
+post "/analyze" do
+  content_type :json
+
+  request_payload =
+    begin
+      JSON.parse(request.body.read)
+    rescue JSON::ParserError
+      halt 400, { error: "Invalid JSON payload" }.to_json
+    end
+
+  question = request_payload["question"]
+  context = request_payload["context"] || {}
+
+  session_id = request_payload["session_id"] || SecureRandom.uuid
+
+  unless question.is_a?(String) && !question.strip.empty?
+    halt 422, { error: "question must be a non-empty string" }.to_json
+    end
+
+  # Retrieve prior explanation for this session
+  prior = SESSION_STORE[session_id]
+  
+  result = Engine::Analyzer.analyze(
+  question: question,
+  context: {
+    session_id: session_id,
+    prior_explanation: prior
+  }
+)
+  # Store the new explanation if it was authoritative
+  if result.dig(:result).is_a?(Engine::Explanation::ExplanationContract)
+    SESSION_STORE[session_id] = result[:result]
+  end
+
+
+answer =
+  if result[:result].respond_to?(:to_h)
+    result.merge(result: result[:result].to_h)
+  else
+    result
+  end
+
+  { result: answer }.to_json
+end
+
+
+================================================
+FILE: sinatra/config.ru
+================================================
+# frozen_string_literal: true
+
+require_relative "./app"
+
+run Sinatra::Application
+
+
+================================================
+FILE: txt/ai-analyst-engine.md
+================================================
+Let me read both files carefully before answering.Reading the AI engine strategy fileReading the AI engine strategy fileNow let me read the gitingest to map exactly what files exist and what moves where.Reading gitingest - directory structure and key filesReading gitingest - directory structure and key filesNow let me read the v0.9 milestone files — the most current — to map exactly which files move to the engine.Reading milestone 08 and 09 file structure in detailReading milestone 08 and 09 file structure in detailI now have everything. Let me build the complete answer to all four questions.
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.25s;
+    animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+  }
+
+
+Question 1 — Is the approach right?
+What is confirmed ✓
+Two repos — engine + demo — correct split
+Sinatra as HTTP adapter only — right decision
+Tailwind CSS — right choice, ships well with Rails 7
+Minimal README for engine — exactly right
+Read-only screens + fictional data — correct
+What you are NOT building list — perfectly scoped
+What needs adjustment →
+Strategy 3 folder structure needs expansion — your engine has 30+ files, not 4. The minimal view hides important architecture. Expand it.
+Strategy 4 README — correct rule but also add an architecture diagram. One diagram communicates what 10 paragraphs can't.
+The engine name "ai-explanation-engine" is fine internally but for portfolio rename to something more specific: reconciliation-ai-engine or ai-analyst-engine. More searchable, more memorable.
+
+
+Question 2 — Exact file extraction map from your gitingest (09-contextual-reuse = source of truth)
+Source: ruby/09-contextual-reuse/ — your most current milestone
+Every file in v0.11 (09-contextual-reuse) is classified below. Green = moves to engine repo. Blue = new file to create. Red = drop entirely. Gray = stays in journey repo only.
+Moves to engine
+New file (create)
+Drop (infra/console only)
+Stays in journey repo
+── Core engine (lib/engine/)
+✓ analyzer.rb <-- NEW: orchestrator wrapping the pipeline below
+✓ intent_resolver.rb <-- from 07-intent-mediation/intent_resolver.rb
+✓ canonicalizer.rb <-- from 09-contextual-reuse/canonicalizer.rb
+✓ alias_map.rb <-- from 09-contextual-reuse/alias_map.rb
+✓ intent_contract.rb <-- from 09-contextual-reuse/intent_contract.rb
+✓ concept_classifier.rb <-- from 09-contextual-reuse/concept_classifier.rb
+✓ explanation_builder.rb <-- from 09-contextual-reuse/explanation_builder.rb
+✓ explanation_contract.rb <-- from 09-contextual-reuse/explanation_contract.rb
+✓ follow_up_classifier.rb <-- from 09-contextual-reuse/follow_up_classifier.rb
+✓ projection_resolver.rb <-- from 09-contextual-reuse/projection_resolver.rb
+✓ context_store.rb <-- from 09-contextual-reuse/context_store.rb
+✓ boundary_responder.rb <-- from 09-contextual-reuse/boundary_responder.rb
+
+── Reliability (lib/engine/reliability/)
+✓ ai_call_boundary.rb <-- from 09-contextual-reuse/ai_call_boundary.rb
+✓ retry_policy.rb <-- from 09-contextual-reuse/retry_policy.rb
+✓ cost_guard.rb <-- from 09-contextual-reuse/cost_guard.rb
+✓ latency_budget.rb <-- from 09-contextual-reuse/latency_budget.rb
+✓ failure_classification.rb <-- from 09-contextual-reuse/failure_classification.rb
+✓ safety_fallback.rb <-- from 09-contextual-reuse/safety_fallback.rb
+✓ trust_contract.rb <-- from 09-contextual-reuse/trust_contract.rb
+
+── Context (lib/engine/context/)
+✓ analysis_context.rb <-- from context/analysis_context.rb
+
+── Knowledge (lib/engine/knowledge/)
+✓ knowledge_authority.rb
+✓ knowledge_domain.rb
+✓ knowledge_registry.rb
+✓ knowledge_source.rb
+✓ knowledge_version.rb
+
+── Eligibility (lib/engine/eligibility/)
+✓ knowledge_eligibility_gate.rb
+✓ knowledge_eligibility_checker.rb
+✓ knowledge_eligibility_reason.rb
+✓ knowledge_eligibility_result.rb
+
+── Grounding (lib/engine/grounding/)
+✓ grounded_explanation_controller.rb
+✓ document_adapter.rb <-- from adapter/
+✓ pdf_document_adapter.rb <-- from adapter/
+
+── Lifecycle (lib/engine/lifecycle/)
+✓ lifecycle_resolver.rb
+✓ reconciliation_life_cycle_map.rb
+
+── Templates (lib/engine/templates/)
+✓ mapping_error_template.rb
+✓ status_template.rb
+✓ terminal_status_template.rb
+✓ transitional_status_template.rb
+
+── Resources (resources/accounting/)
++ concepts.yml <-- NEW: extract alias_map data into YAML config
++ lifecycle.yml <-- NEW: extract lifecycle map into YAML config
+✓ handbook PDF <-- your existing handbook document
+
+── Sinatra adapter (sinatra/)
++ app.rb <-- NEW: POST /analyze → Engine::Analyzer.analyze(q) → JSON
++ config.ru <-- NEW: Rack mount
+
+── Entry point
++ lib/engine.rb <-- NEW: single require file — loads entire engine
++ bin/console <-- NEW: thin console wrapper for local testing
+
+── Drop entirely (console + infra only)
+ai_structured_console.rb <-- console runner, not engine logic
+Dockerfile (milestone copies) <-- replaced by engine Dockerfile
+docker-compose.yml (milestone copies)
+.env.example (milestone copies) <-- one at root of engine repo
+
+
+Question 3 — Complete engine folder structure (corrected from your Strategy 3)
+ai-analyst-engine/ — complete layout
+Your Strategy 3 had 4 files. The real engine has 35. This is the correct minimalist layout — every folder exists for a reason, nothing extra.
+ai-analyst-engine/
+├── lib/
+│ ├── engine.rb ← single require entry point
+│ └── engine/
+│ ├── analyzer.rb ← NEW: top-level orchestrator
+│ ├── context/
+│ │ └── analysis_context.rb
+│ ├── intent/
+│ │ ├── alias_map.rb
+│ │ ├── canonicalizer.rb
+│ │ ├── intent_contract.rb
+│ │ └── intent_resolver.rb
+│ ├── knowledge/
+│ │ ├── knowledge_authority.rb
+│ │ ├── knowledge_domain.rb
+│ │ ├── knowledge_registry.rb
+│ │ ├── knowledge_source.rb
+│ │ └── knowledge_version.rb
+│ ├── eligibility/
+│ │ ├── knowledge_eligibility_gate.rb
+│ │ ├── knowledge_eligibility_checker.rb
+│ │ ├── knowledge_eligibility_reason.rb
+│ │ └── knowledge_eligibility_result.rb
+│ ├── grounding/
+│ │ ├── grounded_explanation_controller.rb
+│ │ ├── document_adapter.rb
+│ │ └── pdf_document_adapter.rb
+│ ├── explanation/
+│ │ ├── concept_classifier.rb
+│ │ ├── explanation_builder.rb
+│ │ ├── explanation_contract.rb
+│ │ └── templates/
+│ │ ├── mapping_error_template.rb
+│ │ ├── status_template.rb
+│ │ ├── terminal_status_template.rb
+│ │ └── transitional_status_template.rb
+│ ├── follow_up/
+│ │ ├── boundary_responder.rb
+│ │ ├── context_store.rb
+│ │ ├── follow_up_classifier.rb
+│ │ └── projection_resolver.rb
+│ ├── lifecycle/
+│ │ ├── lifecycle_resolver.rb
+│ │ └── reconciliation_life_cycle_map.rb
+│ └── reliability/
+│ ├── ai_call_boundary.rb
+│ ├── cost_guard.rb
+│ ├── failure_classification.rb
+│ ├── latency_budget.rb
+│ ├── retry_policy.rb
+│ ├── safety_fallback.rb
+│ └── trust_contract.rb
+├── resources/
+│ └── accounting/
+│ ├── concepts.yml ← NEW: alias map as config
+│ ├── lifecycle.yml ← NEW: lifecycle map as config
+│ └── documents/
+│ └── handbook.pdf ← your existing handbook
+├── sinatra/
+│ ├── app.rb ← NEW: POST /analyze endpoint
+│ └── config.ru ← NEW: Rack mount
+├── bin/
+│ └── console ← NEW: local test console
+├── Gemfile
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+└── README.md
+
+Question 4 — Git commit / branch / tag strategy — locked
+Decision: Milestone-based tags + task-based commits — hybrid
+Your existing journey repo uses milestone-based tags (v0.1.0 through v0.11.0) — this discipline is your strongest portfolio signal. Keep it. For the two new repos the strategy is: task-based commits within a milestone, milestone tag at completion. This matches how real teams work and how your journey has already proven itself.
+
+Repo 1: ai-analyst-engine — branch + tag strategy
+
+branch: main
+Protected. Only receives merges from feature branches. Never commit directly.
+
+branch: setup
+Initial scaffold, Gemfile, Dockerfile, .env.example, README skeleton. Merge → tag v1.0.0-scaffold
+
+branch: extract-core
+Move all 35 files from journey repo into correct engine folders. One commit per logical group: intent/, knowledge/, eligibility/, etc. Merge → tag v1.0.0-core
+
+branch: add-orchestrator
+Write Engine::Analyzer — the single public entry point. Write lib/engine.rb require chain. Merge → tag v1.0.0-orchestrator
+branch: sinatra-adapter
+Write sinatra/app.rb — POST /analyze → Engine::Analyzer.analyze → JSON. Write config.ru. Local test. Merge → tag v1.0.0-api
+branch: resources
+Extract alias_map into concepts.yml. Extract lifecycle_map into lifecycle.yml. Update engine to load from YAML. Merge → tag v1.0.0-resources
+tag: v1.0.0 RELEASE
+Engine is complete, tested via bin/console, Sinatra endpoint live. This is the version the demo app depends on.
+Repo 2: ai-reconciliation-demo — branch + tag strategy
+branch: setup
+rails new, Tailwind, Gemfile, Dockerfile. Merge → tag v0.1.0-scaffold
+branch: seed-data
+Models: PaymentFile, Transaction, Merchant. db/seeds.rb with fictional data. Merge → tag v0.1.0-data
+branch: screens-1-2
+Upload list screen + Display screen. Read-only. Tailwind tables. Merge → tag v0.2.0-screens-1-2
+branch: screens-3-4-5
+Missing screen (colour-coded rows) + Tenancy + Final summary. Merge → tag v0.3.0-screens-3-4-5
+branch: chat-integration
+Stimulus chat controller. POST /analyze to engine. Turbo Stream renders ExplanationContract. Chat widget on all screens. Merge → tag v0.4.0-chat
+branch: deploy
+Render.com config, Docker Compose end-to-end test, README with live link + demo GIF. Merge → tag v0.5.0-live
+tag: v1.0.0 PORTFOLIO RELEASE
+Both repos live. Demo recorded. README complete. This is the version you share with hiring managers.
+Commit message format — lock this convention
+feat(intent): add alias_map extraction to concepts.yml
+feat(sinatra): add POST /analyze endpoint with JSON response
+refactor(engine): introduce Engine::Analyzer orchestrator
+refactor(grounding): reorganise adapter into grounding/ subfolder
+fix(eligibility): correct DENY reason when domain mismatch
+docs(readme): add architecture diagram and live demo link
+chore(docker): update compose for two-service engine + demo
+Format: type(scope): description — conventional commits standard. Makes your git log readable to any engineer who reviews the repo.
+Locked decisions — four answers
+Q1
+Approach is correct. Two corrections: rename engine repo, add architecture diagram to README.
+Q2
+35 files move from 09-contextual-reuse. Source of truth is your latest milestone. 4 new files to create: analyzer.rb, engine.rb, sinatra/app.rb, config.ru. 2 YAML configs to extract. Drop all console runners and milestone-specific Dockerfiles.
+Q3
+Engine structure is 8 logical subfolders under lib/engine/. Your Strategy 3 had 4 files — expanded to the correct 35. Every folder maps to a concept you already built.
+Q4
+Hybrid strategy locked: task-based commits (feat/refactor/fix/docs/chore) within feature branches, milestone tag at each branch merge. Engine: 6 branches → v1.0.0. Demo: 5 branches → v1.0.0. Conventional commits format throughout.
+
+
+
+## The three things worth discussing before you start
+
+**First — the `Engine::Analyzer` orchestrator is the most important new file.** Everything else already exists in your journey repo. This is the one genuinely new piece of work. It is the single public interface of the entire engine — it takes a question string, runs it through the full pipeline (intent → eligibility → grounding → explanation → follow-up or lifecycle), and returns an `ExplanationContract` as JSON. The Sinatra adapter is literally just: receive HTTP POST, call `Engine::Analyzer.analyze(question)`, return the result. That's the complete integration.
+
+**Second — extract alias_map and lifecycle_map into YAML configs.** Right now these are Ruby hashes hardcoded inside `.rb` files. Moving them to `concepts.yml` and `lifecycle.yml` under `resources/accounting/` does two things: it makes your engine genuinely domain-agnostic (swap the YAML, get a different domain), and it makes a much stronger portfolio point — you separated configuration from code. In an interview this is a one-sentence explanation that shows senior thinking.
+
+**Third — on the `bin/console`.** This is your existing `ai_structured_console.rb` rewritten as a clean entry point that loads `lib/engine.rb` and drops into an IRB session. It lets anyone clone the engine repo and run `bin/console` to test it locally without the demo app. This is standard Ruby gem practice and makes your engine feel like a real library, not a script.
+
+The order of work is: build engine repo first (2 days), confirm `bin/console` works end to end, then start the demo Rails app knowing the engine is stable. Do not build both simultaneously.
+
+Ready to start? I can give you the exact code for `Engine::Analyzer`, `lib/engine.rb`, and `sinatra/app.rb` — the three new files that complete the engine.
+
+
+================================================
+FILE: txt/ai-analyst-engine.txt
+================================================
+
+
+Repo 1: ai-analyst-engine — branch + tag strategy
+
+branch: main
+Protected. Only receives merges from feature branches. Never commit directly.
+
+branch: setup
+Initial scaffold, Gemfile, Dockerfile, .env.example, README skeleton. Merge → tag v1.0.0-scaffold
+
+branch: extract-core
+Move all 35 files from journey repo into correct engine folders. One commit per logical group: intent/, knowledge/, eligibility/, etc. Merge → tag v1.0.0-core
+
+branch: add-orchestrator
+Write Engine::Analyzer — the single public entry point. Write lib/engine.rb require chain. Merge → tag v1.0.0-orchestrator
+
+branch: sinatra-adapter
+Write sinatra/app.rb — POST /analyze → Engine::Analyzer.analyze → JSON. Write config.ru. Local test. Merge → tag v1.0.0-api
+
+Fixed lib/engine/analyzer.rb
+
+module Engine
+  class Analyzer
+    def self.analyze(text:, context: {})
+      analysis_ctx = Context::AnalysisContext.new(
+        session_id: context[:session_id] || "api-session",
+        subject: context[:subject] || "unspecified",
+        file_state: context[:file_state] || :none,
+        current_focus: context[:current_focus] || :general,
+        reasoning_budget: context[:reasoning_budget] || :standard,
+        lifecycle: context[:lifecycle] || :analysis,
+        blocking_condition: context[:blocking_condition]
+      )
+
+      # Attach raw text for downstream consumers if needed
+      analysis_ctx.contextual_explanation = text
+
+      canonical = Intent::Canonicalizer.call(analysis_ctx)
+      intent = Intent::IntentResolver.call(canonical)
+
+      concepts = Explanation::ConceptClassifier.call(intent)
+      explanation = Explanation::ExplanationBuilder.call(concepts)
+
+      FollowUp::BoundaryResponder.call(explanation)
+    end
+  end
+end
+
+
+Still Error here is the log -
+rahul@PUTSLIS0375 ai-analyst-engine % docker run --rm -p 4567:4567 ai-analyst-engine
+[2026-05-04 14:48:41] INFO  WEBrick 1.9.2
+[2026-05-04 14:48:41] INFO  ruby 3.2.11 (2026-03-27) [aarch64-linux]
+[2026-05-04 14:48:41] INFO  WEBrick::HTTPServer#start: pid=1 port=4567
+2026-05-04 14:48:49 - NoMethodError - undefined method `call' for Engine::Intent::Canonicalizer:Class:
+	
+	      canonical = Intent::Canonicalizer.call(analysis_ctx)
+	                                       ^^^^^
+	/app/lib/engine/analyzer.rb:17:in `analyze'
+	/app/sinatra/app.rb:27:in `block in <top (required)>'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1775:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1775:in `block in compile!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1065:in `block (3 levels) in route!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1083:in `route_eval'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1065:in `block (2 levels) in route!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1114:in `block in process_route'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1112:in `catch'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1112:in `process_route'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1063:in `block in route!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1060:in `each'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1060:in `route!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1184:in `block in dispatch!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1155:in `catch'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1155:in `invoke'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1179:in `dispatch!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:995:in `block in call!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1155:in `catch'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1155:in `invoke'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:995:in `call!'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:984:in `call'
+	/usr/local/bundle/gems/rack-protection-3.2.0/lib/rack/protection/xss_header.rb:20:in `call'
+	/usr/local/bundle/gems/rack-protection-3.2.0/lib/rack/protection/path_traversal.rb:18:in `call'
+	/usr/local/bundle/gems/rack-protection-3.2.0/lib/rack/protection/json_csrf.rb:28:in `call'
+	/usr/local/bundle/gems/rack-protection-3.2.0/lib/rack/protection/base.rb:53:in `call'
+	/usr/local/bundle/gems/rack-protection-3.2.0/lib/rack/protection/base.rb:53:in `call'
+	/usr/local/bundle/gems/rack-protection-3.2.0/lib/rack/protection/frame_options.rb:33:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/logger.rb:17:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:254:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/head.rb:12:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/method_override.rb:24:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/show_exceptions.rb:23:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:219:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:2086:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1645:in `block in call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1861:in `synchronize'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:1645:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/tempfile_reaper.rb:15:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/lint.rb:50:in `_call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/lint.rb:38:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/show_exceptions.rb:23:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/common_logger.rb:38:in `call'
+	/usr/local/bundle/gems/sinatra-3.2.0/lib/sinatra/base.rb:261:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/content_length.rb:17:in `call'
+	/usr/local/bundle/gems/rack-2.2.23/lib/rack/handler/webrick.rb:95:in `service'
+	/usr/local/bundle/gems/webrick-1.9.2/lib/webrick/httpserver.rb:140:in `service'
+	/usr/local/bundle/gems/webrick-1.9.2/lib/webrick/httpserver.rb:96:in `run'
+	/usr/local/bundle/gems/webrick-1.9.2/lib/webrick/server.rb:309:in `block in start_thread'
+192.168.65.1 - - [04/May/2026:14:48:49 +0000] "POST /analyze HTTP/1.1" 500 3910 0.0132
+^C[2026-05-04 22:20:21] INFO  going to shutdown ...
+[2026-05-04 22:20:21] INFO  WEBrick::HTTPServer#start done.
+
+
+
+How I run it - 
+
+docker build -t ai-analyst-engine .
+rahul@PUTSLIS0375 ai-engineering-journey % curl -X POST http://localhost:4567/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"text":"test input"}'
+NoMethodError: undefined method `call' for Engine::Intent::Canonicalizer:Class
+	/app/lib/engine/analyzer.rb:17:in `analyze'
+	
+
+
+branch: resources
+Extract alias_map into concepts.yml. Extract lifecycle_map into lifecycle.yml. Update engine to load from YAML. Merge → tag v1.0.0-resources
+tag: v1.0.0 RELEASE
+
+
+
+
+================================================
+FILE: txt/ai-engine-stratergy-approach.txt
+================================================
+Stratergy 1 -
+Proposed final repo layout
+Repo 1: ai-explanation-engine
+
+Reusable, domain‑agnostic
+
+
+Core logic
+Domain resources
+Sinatra adapter
+Minimal README
+
+Repo 2: ai-reconciliation-demo
+
+Portfolio presentation
+
+
+Rails 7
+Seeded fictional data
+5 screens
+Embedded chat
+Hotwire UI
+
+✅ CSS / UI framework (recommended)
+Pick ONE, keep it light:
+
+Tailwind CSS ✅ (best with Rails 7)
+
+Clean
+Fast
+Easy layout for tables + panels
+OR
+
+
+Bootstrap if you already know it well
+
+❌ No custom CSS rabbit hole.
+
+This is clean, professional, future‑proof, and interview‑ready.
+
+
+Stratergy 2 -
+Sinatra just turns HTTP → Ruby method → JSON.
+Conceptually:
+Rails UI
+  POST /analyze
+        ↓
+Sinatra endpoint
+        ↓
+Engine.analyze(...)
+        ↓
+ExplanationContract (JSON)
+        ↓
+Rails renders it
+
+That’s it.
+No state.
+No database.
+No UI logic.
+If tomorrow you replace Sinatra with FastAPI:
+
+Engine code stays the same
+Only the HTTP adapter changes
+
+
+
+Stratergy 3 - engine folder structure 
+
+lib/
+  engine/
+    analyzer.rb
+    intent_resolver.rb
+    concept_resolver.rb
+    explanation_contract.rb
+resources/
+  accounting/
+    concepts.yml
+    documents/
+bin/
+  console
+sinatra/
+  app.rb
+README.md
+
+Stratergy 4 - Minimal README
+
+Your README should only answer:
+
+What the engine does
+How to call it
+What it returns
+How to run it
+
+Not the journey.
+Not the evolution.
+Not the thinking.
+
+
+What you are building
+
+✅ A purpose‑built Rails 7 demo app
+✅ Read‑only reconciliation workflow (minimal interaction)
+✅ Embedded chat panel
+✅ Fictional data only
+✅ Focused entirely on explaining reconciliation states & errors
+
+What you are NOT building
+
+❌ Real file upload parsing
+❌ Real financial correctness
+❌ Real reconciliation calculations
+❌ Full auth / RBAC system
+❌ UI perfection
+
+
+================================================
+FILE: txt/extract-core.txt
+================================================
+# ✅ Scope of `extract-core` → `v1.0.0-core`
+
+### What this tag represents
+
+> “All **engine logic files** have been correctly extracted, renamed, and placed into the canonical engine structure.  
+> No orchestration, no adapters, no API, no YAML yet. Raw engine building blocks only.”
+
+This is a **mechanical extraction + normalization gate**.
+
+***
+
+## 🔒 Hard rules for this branch (important)
+
+*   ❌ **Do NOT write new logic**
+*   ❌ **Do NOT refactor behavior**
+*   ✅ Only:
+    *   move files
+    *   rename files
+    *   adjust **module namespaces**
+    *   fix `require` paths if absolutely necessary
+*   ✅ One commit per **logical group** (as you already planned)
+
+If behavior changes here, rollback.
+
+***
+
+# 🌳 Branch setup
+
+```bash
+git checkout main
+git pull
+git checkout -b extract-core
+```
+
+***
+
+# 📁 Step 1 — Create target folder skeleton (no files yet)
+
+Create this structure **first**, empty:
+
+    lib/
+      engine/
+        reliability/
+        context/
+        knowledge/
+        eligibility/
+        grounding/
+        lifecycle/
+        templates/
+
+Do **not** add:
+
+*   `engine.rb`
+*   `analyzer.rb`
+*   `resources/`
+*   `sinatra/`
+
+Those come later branches.
+
+Commit this alone:
+
+```bash
+git commit -m "chore: create canonical engine folder structure"
+```
+
+✅ This gives you a clean base for grouped commits.
+
+***
+
+# 📤 Step 2 — Core engine extraction (top‑level engine files)
+
+### Files
+
+    lib/engine/
+      intent_resolver.rb
+      canonicalizer.rb
+      alias_map.rb
+      intent_contract.rb
+      concept_classifier.rb
+      explanation_builder.rb
+      explanation_contract.rb
+      follow_up_classifier.rb
+      projection_resolver.rb
+      context_store.rb
+      boundary_responder.rb
+
+### Source
+
+From `ruby/09-contextual-reuse/` and earlier milestones as specified.
+
+### Required change
+
+At top of **every file**:
+
+```ruby
+module Engine
+```
+
+…and matching `end`.
+
+❌ No logic edits.  
+✅ Namespace only.
+
+Commit:
+
+```bash
+git commit -m "extract: core engine resolution and explanation components"
+```
+
+***
+
+# 🔁 Step 3 — Reliability layer extraction
+
+### Files
+
+    lib/engine/reliability/
+      ai_call_boundary.rb
+      retry_policy.rb
+      cost_guard.rb
+      latency_budget.rb
+      failure_classification.rb
+      safety_fallback.rb
+      trust_contract.rb
+
+### Rules
+
+*   Namespace as:
+
+```ruby
+module Engine
+  module Reliability
+```
+
+*   Fix internal requires only if broken by path changes.
+
+Commit:
+
+```bash
+git commit -m "extract: reliability safeguards and trust boundaries"
+```
+
+***
+
+# 🧠 Step 4 — Context
+
+### Files
+
+    lib/engine/context/
+      analysis_context.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Context
+```
+
+Commit:
+
+```bash
+git commit -m "extract: analysis context handling"
+```
+
+***
+
+# 📚 Step 5 — Knowledge subsystem
+
+### Files
+
+    lib/engine/knowledge/
+      knowledge_authority.rb
+      knowledge_domain.rb
+      knowledge_registry.rb
+      knowledge_source.rb
+      knowledge_version.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Knowledge
+```
+
+Commit:
+
+```bash
+git commit -m "extract: knowledge model and registry"
+```
+
+***
+
+# ✅ Step 6 — Eligibility subsystem
+
+### Files
+
+    lib/engine/eligibility/
+      knowledge_eligibility_gate.rb
+      knowledge_eligibility_checker.rb
+      knowledge_eligibility_reason.rb
+      knowledge_eligibility_result.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Eligibility
+```
+
+Commit:
+
+```bash
+git commit -m "extract: knowledge eligibility evaluation"
+```
+
+***
+
+# 🌍 Step 7 — Grounding
+
+### Files
+
+    lib/engine/grounding/
+      grounded_explanation_controller.rb
+      document_adapter.rb
+      pdf_document_adapter.rb
+
+### Source
+
+*   `document_adapter.rb`, `pdf_document_adapter.rb` from adapter/
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Grounding
+```
+
+Commit:
+
+```bash
+git commit -m "extract: grounding and document adapters"
+```
+
+***
+
+# 🔄 Step 8 — Lifecycle
+
+### Files
+
+    lib/engine/lifecycle/
+      lifecycle_resolver.rb
+      reconciliation_life_cycle_map.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Lifecycle
+```
+
+Commit:
+
+```bash
+git commit -m "extract: lifecycle resolution logic"
+```
+
+***
+
+# 🧩 Step 9 — Templates
+
+### Files
+
+    lib/engine/templates/
+      mapping_error_template.rb
+      status_template.rb
+      terminal_status_template.rb
+      transitional_status_template.rb
+
+### Rule
+
+Namespace:
+
+```ruby
+module Engine
+  module Templates
+```
+
+Commit:
+
+```bash
+git commit -m "extract: response status and error templates"
+```
+
+***
+
+# 🗑️ Step 10 — Explicitly drop files (do nothing, but be conscious)
+
+Do **NOT** copy:
+
+*   `ai_structured_console.rb`
+*   milestone Dockerfiles
+*   milestone `.env.example`
+*   docker-compose.yml
+
+✅ These remain in journey repo history only.
+
+(No commit needed — just be intentional.)
+
+***
+
+# ✅ Step 11 — Sanity check
+
+Run:
+
+```bash
+bundle exec ruby -c lib/engine/**/*.rb
+```
+
+You are checking:
+
+*   syntax only
+*   not behavior
+
+***
+
+# 🏷️ Step 12 — Tag & merge
+
+```bash
+git tag v1.0.0-core
+git push origin extract-core --tags
+```
+
+Then PR → `main`.
+
+***
+
+# ✅ What `v1.0.0-core` guarantees
+
+*   ✅ All engine logic exists
+*   ✅ All logic is namespaced under `Engine::*`
+*   ✅ No orchestration
+*   ✅ No adapters
+*   ✅ No runtime coupling
+*   ✅ No YAML config yet
+
+This is a **clean, inert engine core**.
+
+***
+
+## 🔜 Next branch (preview only)
+
+Next you will do:
+
+> **`add-orchestrator` → v1.0.0-orchestrator**
+
+That’s where:
+
+*   `Engine::Analyzer`
+*   `lib/engine.rb`
+*   The single public contract
+
+…and the system finally becomes *callable*.
+
+
+
+================================================
+FILE: txt/file-scaffold.txt
+================================================
+
+# ✅ Scope of `setup` → `v1.0.0-scaffold`
+
+### What this tag represents
+
+> “This repository is structurally ready to host the engine, but contains **no engine logic** yet.”
+
+This tag is about **repo hygiene + execution environment** only.
+
+***
+
+# 📁 Files to include (and ONLY these)
+
+    .
+    ├── Gemfile
+    ├── .gitignore
+    ├── Dockerfile
+    ├── .env.example
+    ├── README.md
+
+Nothing under `lib/engine` yet.  
+That comes in `extract-core`.
+
+***
+
+# 1️⃣ Gemfile (minimal, intentional)
+
+### ✅ Purpose
+
+*   Define Ruby version compatibility
+*   Lock *infrastructure-only* deps
+*   No engine behavior yet
+
+### ✅ Contents
+
+```ruby
+source "https://rubygems.org"
+
+ruby ">= 3.1.0"
+
+# Runtime (adapter-level only, not engine logic)
+gem "sinatra", "~> 3.0"
+
+# Dev / local execution
+group :development do
+  gem "rackup"
+end
+```
+
+✅ Notes
+
+*   Sinatra is allowed here because it’s an **adapter**, not engine logic
+*   No testing gems yet (RSpec comes later, if at all)
+
+***
+
+# 2️⃣ .gitignore (boring but correct)
+
+### ✅ Purpose
+
+Keep the repo deterministic and clean.
+
+### ✅ Contents
+
+    .bundle/
+    vendor/bundle
+
+    .env
+    .env.local
+
+    log/
+    tmp/
+
+    .DS_Store
+
+✅ Nothing clever. Nothing custom.
+
+***
+
+# 3️⃣ Dockerfile (execution environment only)
+
+### ✅ Purpose
+
+*   Reproducible runtime
+*   Demo repo can reuse this later
+
+### ✅ Contents
+
+```dockerfile
+FROM ruby:3.2-slim
+
+WORKDIR /app
+
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+
+COPY . .
+
+CMD ["irb"]
+```
+
+✅ Notes
+
+*   No exposed ports yet
+*   No Sinatra run command yet
+*   This just proves the repo **runs**
+
+***
+
+# 4️⃣ .env.example (contract, not secrets)
+
+### ✅ Purpose
+
+Tell future consumers what *might* be configured — without usage yet.
+
+### ✅ Contents
+
+    # Environment
+    RACK_ENV=development
+
+    # App adapter (used later)
+    PORT=4567
+
+✅ This is a **promise**, not an implementation.
+
+***
+
+# 5️⃣ README.md (Strategy‑4: Minimal README)
+
+You were very clear here, so I’ve followed your rules **strictly**.
+
+***
+
+## ✅ README.md (ready to paste)
+
+````markdown
+# ai-analyst-engine
+
+A pure reasoning engine that analyzes text input and produces structured explanations.
+
+This repository contains a **pure reasoning engine**.
+No UI, no persistence, no external dependencies beyond Ruby standard libraries (adapters excluded).
+
+---
+
+## What the engine does
+
+- Accepts natural language input
+- Resolves intent and domain concepts
+- Produces a deterministic, structured explanation output
+
+---
+
+## How to call it
+
+The engine exposes a single public entry point:
+
+```ruby
+Engine::Analyzer.analyze(text:, context: {})
+````
+
+***
+
+## What it returns
+
+A structured explanation object containing:
+
+*   Identified intent
+*   Matched domain concepts
+*   Final explanation payload
+
+(The exact schema is defined by the explanation contract.)
+
+***
+
+## How to run it
+
+### Local
+
+```bash
+bundle install
+bin/console
+```
+
+### Docker
+
+```bash
+docker build -t ai-analyst-engine .
+docker run -it ai-analyst-engine
+```
+
+````
+
+✅ No journey  
+✅ No philosophy essay  
+✅ No evolution  
+✅ No diagrams  
+
+This README will **age well**.
+
+---
+
+# 🏷️ Tagging guidance
+
+After committing these files:
+
+```bash
+git checkout setup
+git commit -m "chore: repository scaffold and runtime setup"
+git tag v1.0.0-scaffold
+git push origin setup --tags
+````
+
+Then merge → `main`.
+
+
+
+
+================================================
+FILE: txt/payment_reconcilation.txt
+================================================
+
+
+The payment reconcillation process, where the file is from the first screen file for the upload well once you upload you can see that file with there statues, second screen you can see the data on merchant aggregated base on a payment file that you uploaded this is the display screen after that next you will see the missing screen which is a transaction level detail where you can identify what all errors or the concerns that find during the parssing phase and that can be shown onto the screen for the accountants validation that is the third screen which is the missing, once you are OK with it and you are going to proceed with the reconciliation then there's a screen named tenancy screen and on the tenancy screen the screen is mainly for the tenancy settlement where interactively you can adjust the amounts you can add update removed or make some sort of adjustment to settle the extra amount or you can settle the extra amount got from payment file that is a part of the campaigns for the partners that you can do on tenancy settlement screen so that is the 4th tenancy screen and then the decision has been made on the basis of whether you want to go for the final full settlement or you have to wait till the campaigns has been created which you can utilise for these settlement if you say the full reconciliation then you will you will be landed onto the first page that is the upload page where you will be notified that once the full reconciliation has been done OK and once the full reconcellation has been done you can have click to 5th screen which is the last where you will see the aggregated data of the reconclilled and unreconcilled data of that payment file so this is entire journey of Payment Reconcillation so you suggest me what is the minimal approach to have this in portfolio project where the system what we build for accountant as a Analyst Assistance Chat boat? Here is confusion shall I create a fresh Rails application with this minimal reconcillation process or shall I extract the module from the Legay client project and extend it to have chat boat feture. give me cons and pros of each and as I need to add this UI chat boat in next 4 days so consider that as well and suggest 
+

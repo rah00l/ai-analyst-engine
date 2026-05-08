@@ -223,6 +223,33 @@ run_test "What‑if reasoning" \
   "NOT_DEFINED"
 
 # ============================================================
+# CATEGORY 8 — Definitions (Enhanced Phrasings)
+# ============================================================
+echo ""
+echo -e "${YELLOW}CATEGORY 8 — Definitions (Enhanced Phrasings)${NC}"
+echo "------------------------------------------------"
+
+run_test "Definition phrasing: what is PARSED" \
+  "What is PARSED?" \
+  "def_p_1" \
+  "SUCCESS"
+
+run_test "Definition phrasing: explain PARTIAL RECONCILED" \
+  "Explain PARTIAL RECONCILED" \
+  "def_p_2" \
+  "SUCCESS"
+
+run_test "Definition phrasing: meaning of MAPPING ERROR" \
+  "Meaning of MAPPING ERROR" \
+  "def_p_3" \
+  "NOT_DEFINED"
+
+run_test "Definition negative: why question" \
+  "Why is PARSED important?" \
+  "def_n_1" \
+  "NOT_DEFINED"
+
+# ============================================================
 # SUMMARY
 # ============================================================
 echo ""

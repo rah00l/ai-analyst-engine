@@ -44,3 +44,79 @@ aliases:
   "parsing error": "PARSING ERROR - Contact Support"
   "reconciling error": "RECONCILING ERROR - Contact Support"
   "reconciliation error": "RECONCILING ERROR - Contact Support"
+
+# ============================================================================
+# Canonical Concepts
+# Each concept owns its definition & question_patterns
+# ============================================================================
+PARSED:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+    - "meaning of {term}"
+    - "tell me about {term}"
+    - "what does {term} indicate"
+
+NEW:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+
+READY:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+
+PROCESSING:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+
+PARTIAL RECONCILED:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+    - "meaning of {term}"
+    - "tell me about {term}"
+
+FULL RECONCILED:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+    - "meaning of {term}"
+
+RECONCILING:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+
+TRAN RECONCILING:
+  type: status
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+    - "what does {term} indicate"
+
+MAPPING ERROR - Payment ID Not Found:
+  type: error
+  question_patterns:
+    - "what does {term} mean"
+    - "what is {term}"
+    - "explain {term}"
+    - "meaning of {term}"
+    - "tell me about {term}"
