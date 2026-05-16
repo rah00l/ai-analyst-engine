@@ -188,6 +188,24 @@ module Engine
       # v0.10.0 equivalent — READ ONLY, no new LLM calls
       # Only fires when Step 5 produced no result
       # --------------------------------------------------------
+      # --------------------------------------------------------
+      # Step 5.5 — Direct standalone lifecycle progression
+      #
+      # Small safe fix:
+      # If the user explicitly names a lifecycle state in the
+      # question (e.g. "What stage comes after PARSED?"),
+      # resolve it directly without requiring prior context.
+      #
+      # This does NOT change the existing follow-up logic below.
+      # --------------------------------------------------------
+      if result.nil?
+        explicit_state = extract_lifecycle_term_from_input(@question)
+
+        if explicit_state && @question.match?(/comes after|what stage comes after|what comes after|next stage|follows/i)
+          result = Lifecycle::LifecycleResolver.new.resolve_next_stage(explicit_state)
+        end
+      end
+
       if result.nil? && context.contextual_explanation
         classification = FollowUp::FollowUpClassifier.new.classify(@question)
 

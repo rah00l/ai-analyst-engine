@@ -175,7 +175,7 @@ echo "------------------------------------------------"
 run_test "Lifecycle: next after PARSED" \
   "What stage comes after PARSED?" \
   "lifecycle_1" \
-  "NOT_DEFINED"
+  "SUCCESS"
 
 run_test "Lifecycle: terminal check" \
   "Is FULL RECONCILED a terminal state?" \
