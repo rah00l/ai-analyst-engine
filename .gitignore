@@ -3,14 +3,24 @@ vendor/bundle
 
 .env
 .env.local
+.env
+.env.production
 
 log/
+*.log
+
+tmp/
 # -------------------------------------------------
 # Internal notes / brainstorming (non-public)
 # -------------------------------------------------
 docs/internal/
 
-
 tmp_load_all.rb
 
 .DS_Store
+
+
+
+
+
+
