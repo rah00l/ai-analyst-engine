@@ -1,11 +1,26 @@
 source "https://rubygems.org"
 
-ruby ">= 3.1.0"
+ruby "3.2.11"
 
-# Runtime (adapter-level only, not engine logic)
-gem "sinatra", "~> 3.0"
+# Web framework
+gem "sinatra", "~> 4.0"
 
-# Dev / local execution
+# HTTP servers
+gem "rackup"
+gem "puma"
+
+# JSON handling
+gem "json"
+
+# Logging
+gem "logger"
+
+# Development tools
 group :development do
-  gem "rackup"
+  gem "rake"
+end
+
+# Production specific (optional)
+group :production do
+  # Add production-specific gems if needed
 end
