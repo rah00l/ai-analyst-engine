@@ -13,3 +13,18 @@ def health():
         "version": "2.0.0-alpha",
         "environment": os.getenv("RACK_ENV", "development")
     }
+
+@app.get("/ready")
+def ready():
+    return {
+        "ready": True,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/info")
+def info():
+    return {
+        "service": "AI Analyst Engine",
+        "version": "2.0.0-alpha",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
