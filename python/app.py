@@ -2,10 +2,15 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
+from dotenv import load_dotenv
+from openai import OpenAI
 import os
 import uuid
 
+load_dotenv()
+
 app = FastAPI(title="AI Analyst Engine", version="2.0.0-alpha")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 class AnalyzeRequest(BaseModel):
@@ -54,12 +59,34 @@ def analyze(payload: AnalyzeRequest):
 
     session_id = payload.session_id or str(uuid.uuid4())
 
-    # STUB — Phase 2A proves the contract shape only.
-    # Real LLM reasoning is added in Step 7.
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a payment reconciliation assistant. "
+                        "Answer questions about reconciliation statuses, "
+                        "transaction mismatches, and workflow states clearly and concisely."
+                    )
+                },
+                {"role": "user", "content": question}
+            ],
+            max_tokens=300
+        )
+        explanation = response.choices[0].message.content
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "llm_call_failed", "code": "ENGINE_ERROR", "message": str(e)}
+        )
+
     return {
         "session_id": session_id,
-        "status": "stub",
-        "explanation": f"[STUB RESPONSE] Received question: '{question}'",
+        "status": "ok",
+        "explanation": explanation,
         "concept": None,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
