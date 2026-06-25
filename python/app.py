@@ -3,14 +3,21 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
-from openai import OpenAI
 import os
 import uuid
+
+from rag.pipeline import initialize, rag_query
 
 load_dotenv()
 
 app = FastAPI(title="AI Analyst Engine", version="2.0.0-alpha")
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+@app.on_event("startup")
+def startup_event():
+    """Initialize RAG pipeline on app startup — chunks, embeds, and stores all handbook docs."""
+    count = initialize(docs_dir="rag_docs", persistent=True)
+    print(f"RAG initialized with {count} chunks")
 
 
 class AnalyzeRequest(BaseModel):
@@ -60,33 +67,18 @@ def analyze(payload: AnalyzeRequest):
     session_id = payload.session_id or str(uuid.uuid4())
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a payment reconciliation assistant. "
-                        "Answer questions about reconciliation statuses, "
-                        "transaction mismatches, and workflow states clearly and concisely."
-                    )
-                },
-                {"role": "user", "content": question}
-            ],
-            max_tokens=300
-        )
-        explanation = response.choices[0].message.content
-
+        result = rag_query(question)
     except Exception as e:
         raise HTTPException(
             status_code=502,
-            detail={"error": "llm_call_failed", "code": "ENGINE_ERROR", "message": str(e)}
+            detail={"error": "rag_query_failed", "code": "ENGINE_ERROR", "message": str(e)}
         )
 
     return {
         "session_id": session_id,
         "status": "ok",
-        "explanation": explanation,
-        "concept": None,
+        "explanation": result["answer"],
+        "sources": result["sources"],
+        "concept": result["retrieved_chunks"][0]["section_title"] if result["retrieved_chunks"] else None,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
