@@ -2,7 +2,7 @@
 
 ## What Is Payment Reconciliation
 
-Payment reconciliation is the process of verifying that we have been paid correctly for all transactions that affiliate networks claim to have paid us for. When a consumer makes a purchase through one of our partner programs, the affiliate network reports that transaction to us and eventually sends payment. Reconciliation is how we confirm that the payment we received matches what was reported, close the transaction in our system, and trigger the downstream calculations that determine how much we owe our partners and consumers. Without reconciliation, we cannot pay our partners their share of commission, because the system requires confirmed payment before calculating distributions.
+Payment reconciliation is the process of verifying that we have been paid correctly for all transactions that affiliate networks claim to have paid us for. When a consumer makes a purchase through one of our partner programs, the affiliate network reports that transaction to us and eventually sends payment. Reconciliation is how we confirm that the payment we received matches what was reported, close the transaction in our system, and trigger the downstream calculations that determine how much we owe our partners and consumers. Without reconciliation, we cannot pay our partners their share of commission, because the system requires confirmed payment before calculating distributions. If a reported transaction is not reversed or cancelled by the network within the standard holding period after the original purchase, we expect it to be included in a future payment and to receive commission for it.
 
 ## Invoice Date Versus Payment Date
 
