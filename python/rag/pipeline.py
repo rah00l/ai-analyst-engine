@@ -100,8 +100,25 @@ def rag_query(question: str, top_k: int = 3) -> Dict:
                 "retrieved_chunks": []
             }
 
-    # Step 1: Retrieve relevant chunks
+# Step 1: Retrieve relevant chunks
     retrieved = retrieve(question, collection=_collection, top_k=top_k)
+
+    # Confidence gate: if best retrieval is too distant, refuse early
+    CONFIDENCE_THRESHOLD = 0.7
+    if retrieved and retrieved[0]["distance"] > CONFIDENCE_THRESHOLD:
+        return {
+            "answer": "I don't have enough information in my knowledge base to answer this question.",
+            "sources": [],
+            "retrieved_chunks": [
+                {
+                    "section_title": chunk["section_title"],
+                    "distance": chunk["distance"],
+                    "preview": chunk["text"][:100]
+                }
+                for chunk in retrieved
+            ]
+        }
+
 
     # Step 2: Build grounded prompt
     context_parts = []
